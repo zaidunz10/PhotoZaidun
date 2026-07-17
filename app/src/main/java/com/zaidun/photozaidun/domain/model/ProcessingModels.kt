@@ -1,0 +1,32 @@
+package com.zaidun.photozaidun.domain.model
+
+import android.net.Uri
+
+enum class WatermarkType { TEXT, IMAGE }
+enum class WatermarkPosition { TOP_LEFT, TOP_RIGHT, CENTER, BOTTOM_LEFT, BOTTOM_RIGHT }
+enum class ResizeMode { PERCENTAGE, EXACT, LONG_EDGE }
+enum class OutputFormat { JPEG, PNG, WEBP }
+
+data class WatermarkConfig(
+    val type: WatermarkType = WatermarkType.TEXT,
+    val text: String = "Photo Zaidun",
+    val imageUri: Uri? = null,
+    val opacity: Float = 0.8f,
+    val size: Float = 0.2f, // 20% dari lebar foto
+    val position: WatermarkPosition = WatermarkPosition.BOTTOM_RIGHT,
+    val marginX: Float = 0.05f,
+    val marginY: Float = 0.05f
+)
+
+data class ResizeConfig(
+    val mode: ResizeMode = ResizeMode.PERCENTAGE,
+    val percentage: Int = 80,
+    val width: Int = 0,
+    val height: Int = 0,
+    val maxLongEdge: Int = 0
+)
+
+data class CompressionConfig(
+    val quality: Int = 85,
+    val format: OutputFormat = OutputFormat.JPEG
+)
