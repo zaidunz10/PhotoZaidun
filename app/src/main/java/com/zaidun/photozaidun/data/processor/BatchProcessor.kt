@@ -4,7 +4,7 @@ import com.zaidun.photozaidun.data.source.local.scanner.ScannerResult
 import com.zaidun.photozaidun.domain.model.PhotoItem
 import com.zaidun.photozaidun.domain.model.ProcessingBatch
 import com.zaidun.photozaidun.domain.model.ProcessingItem
-import jakarta.inject.Inject
+import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 

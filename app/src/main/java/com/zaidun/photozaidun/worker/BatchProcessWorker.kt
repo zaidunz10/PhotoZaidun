@@ -10,7 +10,6 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.zaidun.photozaidun.data.local.datastore.UserPreferencesDataStore
-import androidx.core.net.toUri
 import com.zaidun.photozaidun.data.processor.BitmapProcessor
 import com.zaidun.photozaidun.domain.model.*
 import dagger.assisted.Assisted
@@ -19,12 +18,10 @@ import timber.log.Timber
 import kotlinx.coroutines.flow.first
 @HiltWorker
 class BatchProcessWorker @AssistedInject constructor(
-    @Assisted context: Context,
-    @Assisted params: WorkerParameters,
+    @Assisted appContext: Context,
+    @Assisted workerParams: WorkerParameters,
     private val preferences: UserPreferencesDataStore
-
-) : CoroutineWorker(context, params) {
-
+) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
         val maxPhoto = preferences.maxPhotoPerFolder.first()
         val suffix = preferences.fileSuffix.first()
@@ -67,11 +64,10 @@ class BatchProcessWorker @AssistedInject constructor(
         }
         var photoCount = 0
         var currentPart = 1
-        var currentOutputFolder =
-            targetParentFolder.createDirectory(
-                "${partPrefix}_$currentPart"
-            ) ?: return Result.failure()
+        val batchId = System.currentTimeMillis()
+        var currentOutputFolder = targetParentFolder.createDirectory("${partPrefix}_${currentPart}_$batchId")?: return Result.failure()
         val autoUpload = preferences.autoUpload.first()
+        Timber.tag("BatchProcess").d("Auto Upload = $autoUpload")
 
 
         imageFiles.forEach { file ->
@@ -85,10 +81,7 @@ class BatchProcessWorker @AssistedInject constructor(
 
                     currentPart++
 
-                    currentOutputFolder =
-                        targetParentFolder.createDirectory(
-                            "${partPrefix}_$currentPart"
-                        ) ?: return Result.failure()
+                    currentOutputFolder = targetParentFolder.createDirectory("${partPrefix}_${currentPart}_$batchId")?: return Result.failure()
                     photoCount = 0
                 }
 
@@ -154,6 +147,7 @@ class BatchProcessWorker @AssistedInject constructor(
 
     // Fungsi pembantu untuk trigger worker upload
     private fun triggerDriveUpload(folderUri: Uri?) {
+        Timber.tag("BatchProcess").d("triggerDriveUpload() dipanggil")
         if (folderUri == null) return
 
         val uploadRequest = OneTimeWorkRequestBuilder<DriveUploadWorker>()

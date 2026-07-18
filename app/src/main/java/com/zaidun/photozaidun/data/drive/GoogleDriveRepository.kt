@@ -10,12 +10,7 @@ import javax.inject.Inject
 
 class GoogleDriveRepository @Inject constructor() {
 
-    fun findFolder(
-        drive: Drive,
-        folderName: String,
-        parentId: String? = null
-    ): String? {
-
+    fun findFolder(drive: Drive, folderName: String, parentId: String? = null): String? {
         val query = buildString {
             append("mimeType='application/vnd.google-apps.folder'")
             append(" and trashed=false")
@@ -23,6 +18,9 @@ class GoogleDriveRepository @Inject constructor() {
 
             if (parentId != null) {
                 append(" and '$parentId' in parents")
+            } else {
+                // BARIS INI PENTING: Cari hanya di 'My Drive' utama
+                append(" and 'root' in parents")
             }
         }
 
@@ -78,33 +76,29 @@ class GoogleDriveRepository @Inject constructor() {
         localFile: JavaFile,
         parentFolderId: String? = null
     ): String {
-
         val metadata = File().apply {
-
             name = localFile.name
-
             if (parentFolderId != null) {
                 parents = listOf(parentFolderId)
             }
-
         }
-
 
         val mimeType = URLConnection.guessContentTypeFromName(localFile.name)
             ?: "application/octet-stream"
 
-        val media = FileContent(
-            mimeType,
-            localFile
-        )
+        val media = FileContent(mimeType, localFile)
 
-        val uploaded = drive.files()
-            .create(metadata, media)
+        // UBAH DARI SINI KE BAWAH:
+        val request = drive.files().create(metadata, media)
             .setFields("id,name")
-            .execute()
+
+        // Baris kunci untuk mencegah error "File Not Found":
+        request.mediaHttpUploader.isDirectUploadEnabled = true
+
+        val uploaded = request.execute()
+        // SAMPAI SINI
 
         Timber.d("Upload berhasil: ${uploaded.name} (${uploaded.id})")
-
         return uploaded.id
     }
 }

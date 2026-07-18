@@ -96,6 +96,46 @@ class GoogleAuthManager@Inject constructor(@ApplicationContext private val conte
         }
         return null
     }
+    fun requestDriveAccess(
+        activity: Activity,
+        onTokenReady: (String) -> Unit,
+        onNeedConsent: (IntentSender) -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+
+        val request = AuthorizationRequest.builder()
+            .setRequestedScopes(
+                listOf(
+                    Scope(Scopes.DRIVE_FILE)
+                )
+            )
+            .build()
+
+        Identity.getAuthorizationClient(activity)
+            .authorize(request)
+            .addOnSuccessListener { result ->
+
+                if (result.hasResolution()) {
+
+                    result.pendingIntent?.let {
+                        onNeedConsent(it.intentSender)
+                    }
+
+                } else {
+
+                    val token = result.accessToken
+
+                    if (!token.isNullOrBlank()) {
+                        onTokenReady(token)
+                    } else {
+                        onError(Exception("Access Token kosong"))
+                    }
+
+                }
+
+            }
+            .addOnFailureListener(onError)
+    }
     fun requestDrivePermission(
         activity: Activity,
         onSuccess: () -> Unit,

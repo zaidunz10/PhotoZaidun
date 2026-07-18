@@ -90,47 +90,38 @@ fun WatermarkSettingsScreen(
             }
 
         }
-    LaunchedEffect(
-        previewUri,
-        selectedUri,
-        opacity,
-        scale,
-        position
-    ) {
-
+    LaunchedEffect(previewUri, selectedUri, opacity, scale, position) {
         if (previewUri.isBlank() || selectedUri.isBlank()) {
             renderedPreview = null
             return@LaunchedEffect
         }
 
-        val preview =
-            BitmapUtils.loadBitmap(
-                context,
-                Uri.parse(previewUri)
-            )
-        Log.d(
-            "PREVIEW",
-            "width=${preview.width}, height=${preview.height}"
-        )
+        try {
+            // Gunakan try-catch agar tidak Force Close jika izin ditolak
+            val preview = BitmapUtils.loadBitmap(context, Uri.parse(previewUri))
+            val logo = BitmapUtils.loadBitmap(context, Uri.parse(selectedUri))
 
-        val logo =
-            BitmapUtils.loadBitmap(
-                context,
-                Uri.parse(selectedUri)
-            )
-        val drawer = WatermarkDrawer()
+            val drawer = WatermarkDrawer()
+            val resizedPreview = drawer.createPreview(preview)
 
-        val resizedPreview =
-            drawer.createPreview(preview)
-
-        renderedPreview =
-            drawer.draw(
+            renderedPreview = drawer.draw(
                 resizedPreview,
                 logo,
                 opacity,
                 scale,
                 position
             )
+        } catch (e: SecurityException) {
+            Log.e("Watermark", "Izin akses file ditolak: ${e.message}")
+            // Tampilkan pesan ke user daripada crash
+            Toast.makeText(
+                context,
+                "Izin akses foto hilang. Silakan pilih ulang foto.",
+                Toast.LENGTH_LONG
+            ).show()
+        } catch (e: Exception) {
+            Log.e("Watermark", "Gagal merender preview: ${e.message}")
+        }
     }
 
 
@@ -163,7 +154,7 @@ fun WatermarkSettingsScreen(
                 Spacer(Modifier.height(16.dp))
 
                 Text("Ukuran ${(scale * 100).toInt()}%")
-                Slider(value = scale, valueRange = 0.05f..0.5f, onValueChange = { scale = it })
+                Slider(value = scale, valueRange = 0.05f..1.0f, onValueChange = { scale = it })
 
                 Spacer(Modifier.height(24.dp))
 

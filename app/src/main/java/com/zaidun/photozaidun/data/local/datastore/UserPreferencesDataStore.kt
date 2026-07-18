@@ -15,8 +15,7 @@ import javax.inject.Inject
 // Definisi properti ekstensi DataStore
 private val Context.dataStore by preferencesDataStore("photozaidun_pref")
 
-class UserPreferencesDataStore @Inject constructor(
-    private val context: Context
+class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
 ) {
 
     companion object {
@@ -139,7 +138,7 @@ class UserPreferencesDataStore @Inject constructor(
     val watermarkText: Flow<String> = context.dataStore.data.map { it[WATERMARK_TEXT] ?: "" }
     val previewImageUri: Flow<String> = context.dataStore.data.map { it[PREVIEW_IMAGE_URI] ?: "" }
     val watermarkUri: Flow<String> = context.dataStore.data.map { it[WATERMARK_URI] ?: "" }
-    val watermarkScale: Flow<Float> = context.dataStore.data.map { it[WATERMARK_SCALE] ?: 0.2f }
+    val watermarkScale: Flow<Float> = context.dataStore.data.map { it[WATERMARK_SCALE] ?: 1.0f }
     val mainFolder: Flow<String> = context.dataStore.data.map { it[MAIN_FOLDER] ?: "Customer" }
     val partFolder: Flow<String> = context.dataStore.data.map { it[PART_FOLDER] ?: "part" }
     val fileSuffix: Flow<String> = context.dataStore.data.map { it[FILE_SUFFIX] ?: "" }

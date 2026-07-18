@@ -19,8 +19,12 @@ import android.content.IntentSender
 import com.zaidun.photozaidun.data.auth.GoogleAuthManager
 import com.zaidun.photozaidun.domain.model.PhotoItem
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.update
+import timber.log.Timber
 import javax.inject.Inject
-
+data class DriveAuthResult(
+    val accessToken: String
+)
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val workManager: WorkManager,
@@ -30,39 +34,75 @@ class HomeViewModel @Inject constructor(
 
 
 ) : ViewModel() {
-    private var accessToken: String? = null
+
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+    init {
+        observeUploadProgress()
+    }
+
+    private fun observeUploadProgress() {
+        viewModelScope.launch {
+            workManager.getWorkInfosByTagFlow("UPLOAD_DRIVE").collect { workInfos ->
+                val activeWork = workInfos.filter { !it.state.isFinished }
+                val finishedWork = workInfos.filter { it.state == androidx.work.WorkInfo.State.SUCCEEDED }
+
+                _uiState.update { state ->
+                    state.copy(
+                        isProcessing = activeWork.isNotEmpty(),
+                        processedImages = finishedWork.size // Ini contoh sederhana
+                    )
+                }
+            }
+        }
+    }
     fun requestDrivePermission(
         activity: Activity,
         onNeedUserConsent: (IntentSender) -> Unit,
         onError: (Exception) -> Unit
     ) {
 
-        googleAuthManager.requestDrivePermission(
-            activity = activity,
+        googleAuthManager.requestDriveAccess(
 
-            onSuccess = {
-                onEvent(HomeEvent.StartProcess)
+            activity,
+
+            onTokenReady = { token ->
+
+                viewModelScope.launch {
+
+                    preferences.saveDriveAccessToken(token)
+
+                    onEvent(HomeEvent.StartProcess)
+
+                }
+
             },
 
-            onNeedUserConsent = onNeedUserConsent,
+            onNeedConsent = onNeedUserConsent,
 
             onError = onError
+
         )
+
     }
     fun onAccessTokenReceived(token: String?) {
 
-        if (token.isNullOrBlank()) return
+        if (token.isNullOrBlank()) {
+            Timber.e("Token NULL")
+            return
+        }
+
+        Timber.d("SAVE TOKEN = $token")
 
         viewModelScope.launch {
 
             preferences.saveDriveAccessToken(token)
 
+            Timber.d("TOKEN BERHASIL DISIMPAN")
         }
-
     }
+
     fun onEvent(event: HomeEvent) {
         when (event) {
             HomeEvent.StartProcess -> {

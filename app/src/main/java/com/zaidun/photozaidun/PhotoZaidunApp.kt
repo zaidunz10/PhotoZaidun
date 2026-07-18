@@ -13,14 +13,20 @@ class PhotoZaidunApp : Application(), Configuration.Provider {
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
 
-    override val workManagerConfiguration: Configuration
-        get() = Configuration.Builder()
-            .setWorkerFactory(workerFactory)
-            .setMinimumLoggingLevel(android.util.Log.DEBUG) // Tambahkan log untuk debug
-            .build()
+
 
     override fun onCreate() {
         super.onCreate()
         Timber.plant(Timber.DebugTree())
+
+        android.util.Log.e("PHOTOZAIDUN", "PhotoZaidunApp onCreate")
     }
+    override val workManagerConfiguration: Configuration
+        get() {
+            android.util.Log.e("PHOTOZAIDUN", "Using HiltWorkerFactory = $workerFactory")
+            return Configuration.Builder()
+                .setWorkerFactory(workerFactory)
+                .setMinimumLoggingLevel(android.util.Log.DEBUG)
+                .build()
+        }
 }
