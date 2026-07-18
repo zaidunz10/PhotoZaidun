@@ -1,5 +1,9 @@
 package com.zaidun.photozaidun.presentation.screen.home
 
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -12,11 +16,15 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.google.android.gms.auth.api.identity.Identity
+import timber.log.Timber
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+
 fun HomeScreen(
     viewModel: HomeViewModel,
     onNavigateToHistory: () -> Unit,
@@ -24,7 +32,38 @@ fun HomeScreen(
     onNavigateToFolderPicker: () -> Unit,
     onNavigateToWatermark: () -> Unit
 ) {
+    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
+    val activity = context as Activity
+
+    val launcher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.StartIntentSenderForResult()
+        ) { result ->
+
+            if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+
+            try {
+
+                val authorizationResult =
+                    Identity.getAuthorizationClient(activity)
+                        .getAuthorizationResultFromIntent(result.data)
+
+                val accessToken = authorizationResult.accessToken
+
+                Timber.d("Access Token = $accessToken")
+
+                viewModel.onAccessTokenReceived(accessToken)
+
+                viewModel.startBatchProcess()
+
+            } catch (e: Exception) {
+
+                Timber.e(e)
+
+            }
+
+        }
 
     Scaffold(
         topBar = {
@@ -83,16 +122,40 @@ fun HomeScreen(
             item(span = { GridItemSpan(2) }) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
-                    onClick = { viewModel.onEvent(HomeEvent.StartProcess) },
+                    onClick = {
+
+                        viewModel.requestDrivePermission(
+                            activity = activity,
+
+                            onNeedUserConsent = { sender ->
+
+                                launcher.launch(
+                                    IntentSenderRequest.Builder(sender).build()
+                                )
+
+                            },
+
+                            onError = {
+
+                            }
+
+                        )
+
+                    },
+
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
-                    enabled = uiState.totalImages > 0,
-                    shape = MaterialTheme.shapes.medium
+
+                    enabled = uiState.totalImages > 0
                 ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+
+                    Icon(Icons.Default.PlayArrow, null)
+
                     Spacer(Modifier.width(8.dp))
-                    Text("MULAI PROSES BATCH", style = MaterialTheme.typography.titleMedium)
+
+                    Text("MULAI Export")
+
                 }
             }
         }

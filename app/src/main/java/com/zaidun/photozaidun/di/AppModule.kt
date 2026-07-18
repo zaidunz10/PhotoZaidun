@@ -2,6 +2,7 @@ package com.zaidun.photozaidun.di
 
 import android.content.Context
 import com.zaidun.photozaidun.PhotoZaidunApp
+import com.zaidun.photozaidun.data.drive.DriveServiceFactory
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -20,5 +21,13 @@ object AppModule {
     ): Context {
 
         return context
+    }
+
+    @Provides
+    @Singleton
+    fun provideDriveServiceFactory(): DriveServiceFactory {
+
+        return DriveServiceFactory()
+
     }
 }

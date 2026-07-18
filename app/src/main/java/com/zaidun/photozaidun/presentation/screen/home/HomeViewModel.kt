@@ -1,5 +1,6 @@
 package com.zaidun.photozaidun.presentation.screen.home
 
+import android.app.Activity
 import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
@@ -14,6 +15,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import android.content.Intent
+import android.content.IntentSender
+import com.zaidun.photozaidun.data.auth.GoogleAuthManager
 import com.zaidun.photozaidun.domain.model.PhotoItem
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -21,12 +24,45 @@ import javax.inject.Inject
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val workManager: WorkManager,
-    private val preferences: UserPreferencesDataStore
+    private val preferences: UserPreferencesDataStore,
+    private val googleAuthManager: GoogleAuthManager,
+
+
+
 ) : ViewModel() {
+    private var accessToken: String? = null
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+    fun requestDrivePermission(
+        activity: Activity,
+        onNeedUserConsent: (IntentSender) -> Unit,
+        onError: (Exception) -> Unit
+    ) {
 
+        googleAuthManager.requestDrivePermission(
+            activity = activity,
+
+            onSuccess = {
+                onEvent(HomeEvent.StartProcess)
+            },
+
+            onNeedUserConsent = onNeedUserConsent,
+
+            onError = onError
+        )
+    }
+    fun onAccessTokenReceived(token: String?) {
+
+        if (token.isNullOrBlank()) return
+
+        viewModelScope.launch {
+
+            preferences.saveDriveAccessToken(token)
+
+        }
+
+    }
     fun onEvent(event: HomeEvent) {
         when (event) {
             HomeEvent.StartProcess -> {
@@ -108,5 +144,8 @@ class HomeViewModel @Inject constructor(
             // Jika app Drive tidak ada, buka via Browser
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://drive.google.com")))
         }
+    }
+    fun startBatchProcess() {
+        onEvent(HomeEvent.StartProcess)
     }
 }

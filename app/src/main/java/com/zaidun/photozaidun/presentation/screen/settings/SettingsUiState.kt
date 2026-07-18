@@ -1,6 +1,10 @@
 package com.zaidun.photozaidun.presentation.screen.settings
 
+import com.zaidun.photozaidun.data.auth.GoogleUser
+
 data class SettingsUiState(
+    val googleUser: GoogleUser? = null,
+    val loginLoading: Boolean = false,
 
     val mainFolder: String = "Customer",
 

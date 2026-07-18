@@ -1,5 +1,6 @@
 package com.zaidun.photozaidun.presentation.screen.settings
 
+import android.app.Activity
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
@@ -7,19 +8,24 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.zaidun.photozaidun.domain.model.PhotoItem
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.zaidun.photozaidun.presentation.shared.SharedFolderViewModel
+import kotlin.context
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,6 +37,7 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val photos by sharedFolderViewModel.photos.collectAsState()
     val sharedState by sharedFolderViewModel.state.collectAsState()
+    val context = LocalContext.current
 
     val firstPhoto = photos.firstOrNull()
     val totalPhoto = sharedState.totalImages
@@ -85,13 +92,71 @@ fun SettingsScreen(
 
                     Column(
                         Modifier.padding(16.dp)
+                    ) {Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
 
                         Text(
                             "Google Drive",
                             style = MaterialTheme.typography.titleMedium
                         )
+                        // Indikator Status
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            val isConnected = uiState.googleUser != null
+                            Icon(
+                                imageVector = if (isConnected) Icons.Default.CheckCircle else Icons.Default.Error,
+                                contentDescription = null,
+                                tint = if (isConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = if (isConnected) "Drive Terhubung" else "Drive Tidak Terhubung",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (isConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                            )
+                        }
+                        }
 
+
+
+
+                    Spacer(Modifier.height(12.dp))
+                        if (uiState.googleUser == null) {
+
+                            Button(
+                                onClick = {
+                                    viewModel.loginGoogle(context)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Login dengan Google")
+                            }
+
+                        }else {
+                            // Tampilan Akun yang Terhubung
+                            OutlinedCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.outlinedCardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(uiState.googleUser?.name ?: "User", style = MaterialTheme.typography.bodyMedium)
+                                        Text(uiState.googleUser?.email ?: "", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                    TextButton(onClick = { viewModel.logoutGoogle(activity = context as Activity) }) {
+                                        Text("Logout", color = MaterialTheme.colorScheme.error)
+                                    }
+                                }
+                            }
+                        }
                         Spacer(Modifier.height(12.dp))
 
                         OutlinedTextField(

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -8,6 +10,12 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(localPropertiesFile.inputStream())
+}
+
 android {
 
     namespace = "com.zaidun.photozaidun"
@@ -15,6 +23,12 @@ android {
     compileSdk = 36
 
     defaultConfig {
+        buildConfigField(
+            "String",
+            "WEB_CLIENT_ID",
+            "\"${localProperties.getProperty("WEB_CLIENT_ID") ?: ""}\""
+        )
+
 
         applicationId = "com.zaidun.photozaidun"
 
@@ -33,6 +47,7 @@ android {
             useSupportLibrary = true
         }
     }
+
 
     buildTypes {
 
@@ -91,6 +106,8 @@ dependencies {
     implementation(libs.androidx.hilt.common)
     implementation(libs.androidx.exifinterface)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    ksp(libs.androidx.hilt.compiler)
+    implementation(libs.androidx.hilt.work)
 
     implementation(libs.androidx.lifecycle.runtime.compose)
 
@@ -105,10 +122,13 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
 
     implementation(libs.androidx.compose.material3)
+    implementation("com.google.http-client:google-http-client-android:1.45.0")
     implementation("com.google.api-client:google-api-client-android:2.7.0")
     implementation("com.google.apis:google-api-services-drive:v3-rev20230822-2.0.0")
     implementation("com.google.auth:google-auth-library-oauth2-http:1.21.0")
     implementation("androidx.compose.material:material-icons-extended")
+    implementation("com.google.http-client:google-http-client-gson:1.45.0")
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
     implementation(libs.androidx.navigation.compose)
 
     implementation(libs.hilt.android)
