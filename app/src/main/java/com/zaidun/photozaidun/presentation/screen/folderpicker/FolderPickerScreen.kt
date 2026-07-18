@@ -10,14 +10,17 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.zaidun.photozaidun.domain.model.PhotoItem
 import com.zaidun.photozaidun.presentation.screen.folderpicker.component.EmptyState
 import com.zaidun.photozaidun.presentation.screen.folderpicker.component.ImageGrid
 import com.zaidun.photozaidun.presentation.screen.folderpicker.component.ProgressCard
+import com.zaidun.photozaidun.presentation.shared.SharedFolderViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FolderPickerScreen(
     viewModel: FolderPickerViewModel,
+    sharedFolderViewModel: SharedFolderViewModel,
     onFolderSelected: (Uri, Int) -> Unit,
     onBack: () -> Unit
 ) {
@@ -31,6 +34,12 @@ fun FolderPickerScreen(
             uiState.selectedFolderUri != null &&
             uiState.photos.isNotEmpty()
         ) {
+            sharedFolderViewModel.updateFolder(
+                uri = uiState.selectedFolderUri!!,
+                folderName = uiState.folderName,
+                totalImages = uiState.photos.size,
+                photos = uiState.photos
+            )
 
             onFolderSelected(
                 uiState.selectedFolderUri!!,
@@ -70,10 +79,18 @@ fun FolderPickerScreen(
             uiState.selectedFolderUri != null &&
             uiState.photos.isNotEmpty()
         ) {
+                sharedFolderViewModel.updateFolder(
+                    uri = uiState.selectedFolderUri!!,
+                    folderName = uiState.folderName,
+                    totalImages = uiState.photos.size,
+                    photos = uiState.photos
+                )
+
 
             onFolderSelected(
                 uiState.selectedFolderUri!!,
                 uiState.photos.size
+
             )
 
             onBack()

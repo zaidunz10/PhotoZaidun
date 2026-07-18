@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import android.content.Intent
+import com.zaidun.photozaidun.domain.model.PhotoItem
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -71,14 +72,28 @@ class HomeViewModel @Inject constructor(
     }
 
     // Fungsi tambahan untuk memperbarui state folder dari UI
-    fun updateSelectedFolder(uri: String, count: Int = 0) {
+    fun updateSelectedFolder(
+        uri: String,
+        count: Int = 0,
+        previewPhoto: PhotoItem? = null
+    ) {
+
         _uiState.value = _uiState.value.copy(
+
             selectedFolder = uri,
-            totalImages = count
+
+            totalImages = count,
+
+            previewPhoto = previewPhoto
+
         )
+
         viewModelScope.launch {
+
             preferences.saveLastFolder(uri)
+
         }
+
     }
 
     fun openGoogleDrive(context: Context) {

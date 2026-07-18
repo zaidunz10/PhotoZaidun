@@ -1,12 +1,15 @@
 package com.zaidun.photozaidun.presentation.screen.watermarksettings
 
 import android.content.Intent
+import android.graphics.Bitmap
 import android.net.Uri
+import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import android.widget.Toast
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,13 +26,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import android.graphics.ImageDecoder
+import android.os.Build
+import android.util.Log
 import androidx.compose.ui.unit.dp
+import com.zaidun.photozaidun.utils.BitmapUtils
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil3.compose.AsyncImage
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import com.zaidun.photozaidun.data.processor.watermark.WatermarkDrawer
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,11 +59,17 @@ fun WatermarkSettingsScreen(
     var previewUri by remember(uiState.previewUri) {
         mutableStateOf(uiState.previewUri)
     }
+    var renderedPreview by remember {
+        mutableStateOf<Bitmap?>(null)
+    }
 
     // Picker Logo
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
-            context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            context.contentResolver.takePersistableUriPermission(
+                it,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
             selectedUri = it.toString()
         }
     }
@@ -69,10 +86,52 @@ fun WatermarkSettingsScreen(
                 )
 
                 previewUri = it.toString()
+                Log.d("URI", previewUri)
             }
 
         }
+    LaunchedEffect(
+        previewUri,
+        selectedUri,
+        opacity,
+        scale,
+        position
+    ) {
 
+        if (previewUri.isBlank() || selectedUri.isBlank()) {
+            renderedPreview = null
+            return@LaunchedEffect
+        }
+
+        val preview =
+            BitmapUtils.loadBitmap(
+                context,
+                Uri.parse(previewUri)
+            )
+        Log.d(
+            "PREVIEW",
+            "width=${preview.width}, height=${preview.height}"
+        )
+
+        val logo =
+            BitmapUtils.loadBitmap(
+                context,
+                Uri.parse(selectedUri)
+            )
+        val drawer = WatermarkDrawer()
+
+        val resizedPreview =
+            drawer.createPreview(preview)
+
+        renderedPreview =
+            drawer.draw(
+                resizedPreview,
+                logo,
+                opacity,
+                scale,
+                position
+            )
+    }
 
 
     Scaffold(
@@ -109,52 +168,41 @@ fun WatermarkSettingsScreen(
                 Spacer(Modifier.height(24.dp))
 
                 // 2. LOGIC LIVE PREVIEW
-                Text("Pratinjau Langsung", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Pratinjau Langsung",
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                Spacer(Modifier.height(12.dp))
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp)
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+                        .height(220.dp)
+                        .border(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant,
+                            RoundedCornerShape(12.dp)
+                        )
                         .clip(RoundedCornerShape(12.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (previewUri.isNotBlank()) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            // Foto Sample (Background)
-                            AsyncImage(
-                                model = if (previewUri.isNotBlank())
-                                    Uri.parse(previewUri)
-                                else
-                                    null,
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Fit
-                            )
 
+                    if (renderedPreview != null) {
 
-                            // Watermark (Overlay)
-                            val align = when (position) {
-                                "TOP_LEFT" -> Alignment.TopStart
-                                "TOP_RIGHT" -> Alignment.TopEnd
-                                "CENTER" -> Alignment.Center
-                                "BOTTOM_LEFT" -> Alignment.BottomStart
-                                "BOTTOM_RIGHT" -> Alignment.BottomEnd
-                                else -> Alignment.BottomEnd
-                            }
-                            Box(modifier = Modifier.matchParentSize().padding(8.dp), contentAlignment = align) {
-                                if (selectedUri.isNotBlank()) {
-                                    AsyncImage(model = selectedUri, contentDescription = null, modifier = Modifier.fillMaxWidth(scale).alpha(opacity), contentScale = ContentScale.Fit)
-                                } else {
-                                    Text("PHOTO ZAIDUN", color = Color.Red.copy(alpha = opacity), fontSize = (scale * 100).sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
+                        Image(
+                            bitmap = renderedPreview!!.asImageBitmap(),
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit
+                        )
+
                     } else {
-                        Text("Belum ada folder dipilih", style = MaterialTheme.typography.bodySmall)
+
+                        Text("Pilih logo dan foto preview")
+
                     }
                 }
-
-
                 Spacer(Modifier.height(24.dp))
                 Button(
                     onClick = {
@@ -169,9 +217,16 @@ fun WatermarkSettingsScreen(
 
                 // 3. PILIHAN POSISI
                 Text("Posisi", style = MaterialTheme.typography.titleMedium)
-                listOf("TOP_LEFT", "TOP_RIGHT", "CENTER", "BOTTOM_LEFT", "BOTTOM_RIGHT").forEach { item ->
+                listOf(
+                    "TOP_LEFT",
+                    "TOP_RIGHT",
+                    "CENTER",
+                    "BOTTOM_LEFT",
+                    "BOTTOM_RIGHT"
+                ).forEach { item ->
                     Row(
-                        modifier = Modifier.fillMaxWidth().clickable { position = item }.padding(vertical = 4.dp),
+                        modifier = Modifier.fillMaxWidth().clickable { position = item }
+                            .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(selected = position == item, onClick = { position = item })
@@ -182,17 +237,20 @@ fun WatermarkSettingsScreen(
 
             // TOMBOL SIMPAN (Sticky Bottom)
             Surface(tonalElevation = 3.dp) {
-                Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
                     TextButton(onClick = onBack) { Text("Batal") }
                     Button(
                         onClick = {
                             viewModel.save(
-                            logoUri = selectedUri,
-                            previewUri = previewUri?.toString() ?: "",
-                            opacity = opacity,
-                            scale = scale,
-                            position = position
-                        )
+                                logoUri = selectedUri,
+                                previewUri = previewUri,
+                                opacity = opacity,
+                                scale = scale,
+                                position = position
+                            )
                             Toast.makeText(
                                 context,
                                 "Watermark berhasil disimpan",

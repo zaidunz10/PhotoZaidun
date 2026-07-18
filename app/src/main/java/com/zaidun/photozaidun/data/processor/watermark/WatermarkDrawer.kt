@@ -6,6 +6,33 @@ import android.graphics.Paint
 
 class WatermarkDrawer {
 
+    fun createPreview(
+        bitmap: Bitmap,
+        maxSize: Int = 720
+    ): Bitmap {
+
+        val ratio = bitmap.width.toFloat() / bitmap.height
+
+        return if (bitmap.width >= bitmap.height) {
+
+            Bitmap.createScaledBitmap(
+                bitmap,
+                maxSize,
+                (maxSize / ratio).toInt(),
+                true
+            )
+
+        } else {
+
+            Bitmap.createScaledBitmap(
+                bitmap,
+                (maxSize * ratio).toInt(),
+                maxSize,
+                true
+            )
+
+        }
+    }
     fun draw(
 
         bitmap: Bitmap,
@@ -53,7 +80,8 @@ class WatermarkDrawer {
 
         )
 
-        val margin = 24
+        val margin =
+            (result.width * 0.02f).toInt()
 
         val x: Float
         val y: Float
@@ -83,6 +111,13 @@ class WatermarkDrawer {
 
                 y =
                     (result.height - targetHeight - margin).toFloat()
+
+            }
+            "CENTER" -> {
+
+                x = ((result.width - targetWidth) / 2f)
+
+                y = ((result.height - targetHeight) / 2f)
 
             }
 

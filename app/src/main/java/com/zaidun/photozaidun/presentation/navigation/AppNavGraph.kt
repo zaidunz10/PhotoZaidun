@@ -1,6 +1,7 @@
 package com.zaidun.photozaidun.presentation.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -57,9 +58,8 @@ fun AppNavGraph() {
         composable(Screen.FolderPicker.route) {
 
             FolderPickerScreen(
-
                 viewModel = hiltViewModel(),
-
+                sharedFolderViewModel = sharedFolderViewModel,
                 onFolderSelected = { uri, total ->
 
                     homeViewModel.updateSelectedFolder(
@@ -68,13 +68,9 @@ fun AppNavGraph() {
                     )
 
                 },
-
                 onBack = {
-
                     navController.popBackStack()
-
                 }
-
             )
 
         }
@@ -109,14 +105,12 @@ fun AppNavGraph() {
 
         composable(Screen.Settings.route) {
 
+            val homeState = homeViewModel.uiState.collectAsState()
+
             SettingsScreen(
-
                 onBack = {
-
                     navController.popBackStack()
-
                 }
-
             )
 
         }

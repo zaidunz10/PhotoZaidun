@@ -20,6 +20,18 @@ class UserPreferencesDataStore @Inject constructor(
 ) {
 
     companion object {
+        val MAIN_FOLDER =
+            stringPreferencesKey("main_folder")
+
+        val PART_FOLDER =
+            stringPreferencesKey("part_folder")
+
+        val FILE_SUFFIX =
+            stringPreferencesKey("file_suffix")
+
+        val MAX_PHOTO_PER_FOLDER =
+            intPreferencesKey("max_photo_per_folder")
+
         val WATERMARK_URI =
             stringPreferencesKey("watermark_uri")
 
@@ -49,6 +61,29 @@ class UserPreferencesDataStore @Inject constructor(
 
         val LAST_FOLDER =
             stringPreferencesKey("last_folder")
+    }
+    suspend fun saveMainFolder(value: String) {
+        context.dataStore.edit {
+            it[MAIN_FOLDER] = value
+        }
+    }
+
+    suspend fun savePartFolder(value: String) {
+        context.dataStore.edit {
+            it[PART_FOLDER] = value
+        }
+    }
+
+    suspend fun saveFileSuffix(value: String) {
+        context.dataStore.edit {
+            it[FILE_SUFFIX] = value
+        }
+    }
+
+    suspend fun saveMaxPhotoPerFolder(value: Int) {
+        context.dataStore.edit {
+            it[MAX_PHOTO_PER_FOLDER] = value
+        }
     }
 
     suspend fun saveWatermarkText(
@@ -124,6 +159,25 @@ class UserPreferencesDataStore @Inject constructor(
 
             it[WATERMARK_SCALE] ?: 0.2f
 
+        }
+    val mainFolder: Flow<String> =
+        context.dataStore.data.map {
+            it[MAIN_FOLDER] ?: "Customer"
+        }
+
+    val partFolder: Flow<String> =
+        context.dataStore.data.map {
+            it[PART_FOLDER] ?: "part"
+        }
+
+    val fileSuffix: Flow<String> =
+        context.dataStore.data.map {
+            it[FILE_SUFFIX] ?: ""
+        }
+
+    val maxPhotoPerFolder: Flow<Int> =
+        context.dataStore.data.map {
+            it[MAX_PHOTO_PER_FOLDER] ?: 200
         }
     private val WATERMARK_OFFSET_X =
         floatPreferencesKey("watermark_offset_x")

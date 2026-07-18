@@ -89,7 +89,7 @@ dependencies {
     implementation(libs.androidx.documentfile)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.hilt.common)
-
+    implementation(libs.androidx.exifinterface)
     implementation(libs.androidx.lifecycle.runtime.ktx)
 
     implementation(libs.androidx.lifecycle.runtime.compose)
