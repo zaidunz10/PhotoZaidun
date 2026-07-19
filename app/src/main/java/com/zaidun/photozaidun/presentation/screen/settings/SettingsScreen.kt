@@ -28,6 +28,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.text.style.TextAlign
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -247,6 +248,17 @@ fun SettingsScreen(
 
                     }
                 }
+            }
+            item {
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = "Copyright by zaidunz_photo",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.LightGray,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(24.dp))
             }
         }
     }

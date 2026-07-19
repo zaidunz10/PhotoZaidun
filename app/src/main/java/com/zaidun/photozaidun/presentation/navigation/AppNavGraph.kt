@@ -30,6 +30,7 @@ fun AppNavGraph() {
 
             MainScreen(
                 homeViewModel = homeViewModel,
+                sharedFolderViewModel = sharedFolderViewModel,
                 onNavigateToFolderPicker = {
                     navController.navigate(Screen.FolderPicker.route)
                 },

@@ -17,16 +17,9 @@ sealed class Screen(val route: String) {
     data object Export : Screen("export")
 
     data object Progress : Screen("progress")
-
     data object History : Screen("history")
 
-    data object HistoryDetail : Screen("history_detail")
-
-    data object Dashboard : Screen("dashboard")
-
-    data object Preset : Screen("preset")
-
     data object Settings : Screen("settings")
-
+    data object Contact : Screen("contact")
     data object Drive : Screen("drive")
 }

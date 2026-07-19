@@ -101,11 +101,13 @@ android {
 
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.documentfile)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.hilt.common)
     implementation(libs.androidx.exifinterface)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.material3)
     ksp(libs.androidx.hilt.compiler)
     implementation(libs.androidx.hilt.work)
 

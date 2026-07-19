@@ -40,6 +40,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil3.compose.AsyncImage
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.text.style.TextAlign
 import com.zaidun.photozaidun.data.processor.watermark.WatermarkDrawer
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -135,10 +136,15 @@ fun WatermarkSettingsScreen(
             )
         }
     ) { padding ->
-        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+        Column(modifier = Modifier
+            .padding(padding)
+            .fillMaxSize()) {
             // AREA PENGATURAN (Scrollable)
             Column(
-                modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp)
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp)
             ) {
                 Button(
                     onClick = { picker.launch(arrayOf("image/*")) },
@@ -216,20 +222,34 @@ fun WatermarkSettingsScreen(
                     "BOTTOM_RIGHT"
                 ).forEach { item ->
                     Row(
-                        modifier = Modifier.fillMaxWidth().clickable { position = item }
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { position = item }
                             .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(selected = position == item, onClick = { position = item })
                         Text(item)
                     }
+                    Spacer(Modifier.height(24.dp))
+
                 }
+                Text(
+                    text = "Copyright by zaidunz_photo",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.LightGray,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(16.dp))
             }
 
             // TOMBOL SIMPAN (Sticky Bottom)
             Surface(tonalElevation = 3.dp) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     TextButton(onClick = onBack) { Text("Batal") }

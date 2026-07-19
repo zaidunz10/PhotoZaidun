@@ -9,8 +9,7 @@ class AccessTokenCredential(
 
     override fun initialize(request: HttpRequest) {
 
-        request.headers.authorization =
-            "Bearer $accessToken"
+        request.headers.setAuthorization ("Bearer $accessToken")
 
     }
 

@@ -19,17 +19,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
+import androidx.compose.foundation.lazy.grid.items // PENTING: Untuk looping list foto
+import androidx.compose.ui.layout.ContentScale    // PENTING: Untuk ContentScale.Crop
+import coil3.compose.AsyncImage                 // Untuk menampilkan gambar
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
+    sharedFolderViewModel: com.zaidun.photozaidun.presentation.shared.SharedFolderViewModel,
     onNavigateToHistory: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToFolderPicker: () -> Unit,
     onNavigateToWatermark: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val photos by sharedFolderViewModel.photos.collectAsState()
 
     Scaffold(
         topBar = {
@@ -85,7 +89,10 @@ fun HomeScreen(
                                 ) {
                                     Text(
                                         if (uiState.totalImages > 0) "${uiState.totalImages} Foto" else "Kosong",
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                                        modifier = Modifier.padding(
+                                            horizontal = 12.dp,
+                                            vertical = 4.dp
+                                        ),
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold
                                     )
@@ -119,7 +126,11 @@ fun HomeScreen(
                                     contentColor = Color.Black
                                 )
                             ) {
-                                Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Icon(
+                                    Icons.Default.Folder,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
                                 Spacer(Modifier.width(8.dp))
                                 Text("Pilih Folder", fontWeight = FontWeight.Bold)
                             }
@@ -127,21 +138,39 @@ fun HomeScreen(
                     }
                 }
 
-                // 2. Section Aksi Cepat
+                // 2. Foto-foto yang dipilih
                 item(span = { GridItemSpan(2) }) {
                     Text(
-                        "Aksi Cepat",
+                        "Foto terpilih",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 8.dp)
+                        modifier = Modifier.padding(top = 8.dp)
                     )
                 }
 
-                item { ActionCardV2("Pilih Folder", Icons.Default.Folder, Color(0xFFDED9F5), onNavigateToFolderPicker) }
-                item { ActionCardV2("Watermark", Icons.Default.Brush, Color(0xFFF7D9E3), onNavigateToWatermark) }
-                item { ActionCardV2("Riwayat", Icons.Default.History, Color(0xFFDED9F5), onNavigateToHistory) }
-                item { ActionCardV2("Pengaturan", Icons.Default.Settings, Color(0xFFD9E9F7), onNavigateToSettings) }
+
+                if (photos.isNotEmpty()) {
+                    // Pakai items() untuk melooping foto asli
+                    items(photos) { photo ->
+                        Card(
+                            modifier = Modifier.aspectRatio(1f).padding(4.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            coil3.compose.AsyncImage(
+                                model = photo.uri,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+                    }
+                } else {
+                    item(span = { GridItemSpan(2) }) {
+                        Text("Belum ada foto dimuat", color = Color.Gray)
+                    }
+                }
             }
+
 
             // 3. Tombol Export di Bawah (Sticky)
             Column(
@@ -175,8 +204,16 @@ fun HomeScreen(
                         textAlign = TextAlign.Center
                     )
                 }
+
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    "Copyright by zaidunz_photo",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.LightGray
+                )
             }
         }
+
     }
 }
 
