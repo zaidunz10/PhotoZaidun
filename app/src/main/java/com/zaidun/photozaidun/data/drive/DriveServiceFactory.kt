@@ -15,9 +15,8 @@ class DriveServiceFactory @Inject constructor() {
 
         return Drive.Builder(
 
-            AndroidHttp.newCompatibleTransport(),
-
-            GsonFactory.getDefaultInstance(),
+            com.google.api.client.http.javanet.NetHttpTransport(), // Ganti ke ini
+        com.google.api.client.json.gson.GsonFactory.getDefaultInstance(),
 
             AccessTokenCredential(accessToken)
 
