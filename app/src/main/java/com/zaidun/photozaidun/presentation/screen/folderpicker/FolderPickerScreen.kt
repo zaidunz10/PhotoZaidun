@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.zaidun.photozaidun.domain.model.PhotoItem
 import com.zaidun.photozaidun.presentation.screen.folderpicker.component.EmptyState
 import com.zaidun.photozaidun.presentation.screen.folderpicker.component.ImageGrid
@@ -20,7 +21,7 @@ import com.zaidun.photozaidun.presentation.shared.SharedFolderViewModel
 @Composable
 fun FolderPickerScreen(
     viewModel: FolderPickerViewModel,
-    sharedFolderViewModel: SharedFolderViewModel,
+    sharedFolderViewModel: SharedFolderViewModel= hiltViewModel(),
     onFolderSelected: (Uri, Int) -> Unit,
     onBack: () -> Unit
 ) {
@@ -79,12 +80,12 @@ fun FolderPickerScreen(
             uiState.selectedFolderUri != null &&
             uiState.photos.isNotEmpty()
         ) {
-                sharedFolderViewModel.updateFolder(
-                    uri = uiState.selectedFolderUri!!,
-                    folderName = uiState.folderName,
-                    totalImages = uiState.photos.size,
-                    photos = uiState.photos
-                )
+            sharedFolderViewModel.updateFolder(
+                uri = uiState.selectedFolderUri!!,
+                folderName = uiState.folderName,
+                totalImages = uiState.photos.size,
+                photos = uiState.photos
+            )
 
 
             onFolderSelected(
@@ -136,8 +137,13 @@ fun FolderPickerScreen(
 
             ) {
 
-                Text("Pilih Folder")
+                Text(
+                    if (uiState.scanning) "Sedang mencari foto..." else "Pilih Folder"
+                )
+            }
 
+            if (uiState.error != null) {
+                Text(uiState.error!!, color = MaterialTheme.colorScheme.error)
             }
 
             Spacer(

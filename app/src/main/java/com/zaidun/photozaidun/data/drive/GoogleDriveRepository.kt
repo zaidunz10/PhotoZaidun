@@ -1,5 +1,6 @@
 package com.zaidun.photozaidun.data.drive
 
+import android.R.attr.query
 import com.google.api.client.http.FileContent
 import com.google.api.services.drive.Drive
 import com.google.api.services.drive.model.File
@@ -10,26 +11,79 @@ import javax.inject.Inject
 
 class GoogleDriveRepository @Inject constructor() {
 
-    fun findFolder(drive: Drive, folderName: String, parentId: String? = null): String? {
+    fun findFolder(
+        drive: Drive,
+        folderName: String,
+        parentId: String? = null
+    ): String? {
+
+        val cleanName = folderName.trim()
+
         val query = buildString {
+            Timber.d("Query: $query")
             append("mimeType='application/vnd.google-apps.folder'")
             append(" and trashed=false")
-            append(" and name='$folderName'")
+            append(" and name='$cleanName'")
 
             if (parentId != null) {
                 append(" and '$parentId' in parents")
             } else {
-                // BARIS INI PENTING: Cari hanya di 'My Drive' utama
                 append(" and 'root' in parents")
             }
         }
 
-        val result = drive.files().list()
+        val result = drive.files()
+            .list()
             .setQ(query)
-            .setFields("files(id,name)")
+            .setSpaces("drive")
+            .setFields("files(id,name,createdTime)")
             .execute()
 
-        return result.files.firstOrNull()?.id
+        val folders = result.files ?: emptyList()
+
+        if (folders.isEmpty()) {
+            Timber.d("Folder '$cleanName' tidak ditemukan")
+            return null
+        }
+
+        // Jika ada lebih dari satu folder dengan nama sama,
+        // gunakan yang paling lama dibuat.
+        val selected = folders.minByOrNull { it.createdTime.value }!!
+
+        Timber.d("Menggunakan folder ${selected.name} (${selected.id})")
+
+        return selected.id
+    }
+    fun findFolders(
+        drive: Drive,
+        folderName: String,
+        parentId: String? = null
+
+    ): List<File> {
+
+
+        val cleanName = folderName.trim()
+
+        val query = buildString {
+
+            append("mimeType='application/vnd.google-apps.folder'")
+            append(" and trashed=false")
+            append(" and name='$cleanName'")
+
+            if (parentId != null) {
+                append(" and '$parentId' in parents")
+            } else {
+                append(" and 'root' in parents")
+            }
+        }
+
+        return drive.files()
+            .list()
+            .setQ(query)
+            .setSpaces("drive")
+            .setFields("files(id,name,createdTime)")
+            .execute()
+            .files ?: emptyList()
     }
 
     fun createFolder(
@@ -60,15 +114,28 @@ class GoogleDriveRepository @Inject constructor() {
         parentId: String? = null
     ): String {
 
-        return findFolder(
-            drive,
-            folderName,
-            parentId
-        ) ?: createFolder(
+        val folderId = findFolder(
             drive,
             folderName,
             parentId
         )
+
+        return if (folderId != null) {
+
+            Timber.d("Folder ditemukan")
+
+            folderId
+
+        } else {
+
+            Timber.d("Folder belum ada, membuat folder baru")
+
+            createFolder(
+                drive,
+                folderName,
+                parentId
+            )
+        }
     }
 
     fun uploadFile(

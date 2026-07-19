@@ -3,396 +3,251 @@ package com.zaidun.photozaidun.presentation.screen.settings
 import android.app.Activity
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.CreateNewFolder
-import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Numbers
+import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.zaidun.photozaidun.domain.model.PhotoItem
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.zaidun.photozaidun.presentation.shared.SharedFolderViewModel
-import kotlin.context
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
-    sharedFolderViewModel: SharedFolderViewModel = hiltViewModel(),
     onBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val photos by sharedFolderViewModel.photos.collectAsState()
-    val sharedState by sharedFolderViewModel.state.collectAsState()
     val context = LocalContext.current
+    val consentLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.StartIntentSenderForResult()
+        ) { result ->
 
-    val firstPhoto = photos.firstOrNull()
-    val totalPhoto = sharedState.totalImages
+            if (result.resultCode == Activity.RESULT_OK) {
 
-    var mainFolder = uiState.mainFolder
-    var partFolder = uiState.partFolder
-    var fileSuffix = uiState.fileSuffix
+                viewModel.loginGoogle(
+                    activity = context as Activity,
+                    onNeedConsent = { },
+                    onError = { }
+                )
 
-
-    var maxPhotoPerFolder  = uiState.maxPhotoPerFolder
-    var resizePercent  = uiState.resizePercent
-    var autoUpload  = uiState.autoUpload
-    var localFolder by remember { mutableStateOf("/Pictures/Photo Zaidun") }
-
-    Scaffold(
-
-        topBar = {
-
-            TopAppBar(
-
-                title = {
-                    Text("Pengaturan Export")
-                },
-
-                navigationIcon = {
-
-                    IconButton(onClick = onBack) {
-
-                        Icon(Icons.Default.ArrowBack, null)
-
-                    }
-
-                }
-
-            )
-
+            }
         }
 
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Pengaturan Export", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
+                    }
+                }
+            )
+        }
     ) { padding ->
-
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(16.dp)
+            contentPadding = PaddingValues(20.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
+            // 1. Google Drive Login
             item {
+                Text("Koneksi Cloud", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.height(12.dp))
+                if (uiState.googleUser == null) {
+                    Button(
+                        onClick = {
+                            viewModel.loginGoogle(
+                                activity = context as Activity,
+                                onNeedConsent = { sender ->
 
+                                    consentLauncher.launch(
+                                        IntentSenderRequest.Builder(sender).build()
+                                    )
 
-                ElevatedCard {
+                                    /* Silently ignore for now to fix compile */ },
+                                onError = {
 
-                    Column(
-                        Modifier.padding(16.dp)
-                    ) {Row(
+                                    it.printStackTrace()
+
+                                }
+                            )
+                        },
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4285F4))
                     ) {
-
-                        Text(
-                            "Google Drive",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        // Indikator Status
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            val isConnected = uiState.googleUser != null
-                            Icon(
-                                imageVector = if (isConnected) Icons.Default.CheckCircle else Icons.Default.Error,
-                                contentDescription = null,
-                                tint = if (isConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = if (isConnected) "Drive Terhubung" else "Drive Tidak Terhubung",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = if (isConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                            )
-                        }
-                        }
-
-
-
-
-                    Spacer(Modifier.height(12.dp))
-                        if (uiState.googleUser == null) {
-
-                            Button(
-                                onClick = {
-                                    viewModel.loginGoogle(context)
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Login dengan Google")
-                            }
-
-                        }else {
-                            // Tampilan Akun yang Terhubung
-                            OutlinedCard(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.outlinedCardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(uiState.googleUser?.name ?: "User", style = MaterialTheme.typography.bodyMedium)
-                                        Text(uiState.googleUser?.email ?: "", style = MaterialTheme.typography.labelSmall)
-                                    }
-                                    TextButton(onClick = { viewModel.logoutGoogle(activity = context as Activity) }) {
-                                        Text("Logout", color = MaterialTheme.colorScheme.error)
-                                    }
-                                }
-                            }
-                        }
-                        Spacer(Modifier.height(12.dp))
-
-                        OutlinedTextField(
-                            value = mainFolder,
-                            onValueChange = {
-                                viewModel.saveMainFolder(it)
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = {
-                                Text("Nama Folder Utama")
-                            },
-                            leadingIcon = {
-                                Icon(Icons.Default.CreateNewFolder, null)
-                            }
-                        )
-
-                        Spacer(Modifier.height(12.dp))
-
-                        OutlinedTextField(
-                            value = partFolder,
-                            onValueChange = {
-                                viewModel.savePartFolder(it)
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = {
-                                Text("Nama Folder Part")
-                            },
-                            supportingText = {
-                                Text("Otomatis menjadi part1, part2, part3...")
-                            },
-                            leadingIcon = {
-                                Icon(Icons.Default.Folder, null)
-                            }
-                        )
-
+                        Icon(Icons.Default.CloudUpload, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Login ke My Drive")
                     }
-
+                } else {
+                    OutlinedCard(shape = RoundedCornerShape(12.dp)) {
+                        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(uiState.googleUser?.name ?: "User", fontWeight = FontWeight.Bold)
+                                Text(uiState.googleUser?.email ?: "", style = MaterialTheme.typography.bodySmall)
+                            }
+                            TextButton(onClick = { viewModel.logoutGoogle(context as Activity) }) {
+                                Text("Logout", color = Color.Red)
+                            }
+                        }
+                    }
                 }
+                AssistChip(
+                    onClick = { },
+                    enabled = false,
+                    label = {
+                        Text(
+                            if (uiState.driveConnected)
+                                "Terhubung dengan Drive"
+                            else
+                                "Belum terhubung dengan Drive"
+                        )
+                    }
+                )
             }
+
+
+            // 2. 3 Level Folder + Nama Tambahan
             item {
+                Text("Struktur Folder & Penamaan", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.height(12.dp))
 
+                // Level 1: Induk Folder
+                OutlinedTextField(
+                    value = uiState.rootFolder,
+                    onValueChange = { viewModel.saveRootFolder(it) },
+                    label = { Text("Induk Folder (Level 1)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    leadingIcon = { Icon(Icons.Default.Folder, null) }
+                )
 
-                ElevatedCard {
+                Spacer(Modifier.height(16.dp))
 
-                    Column(
-                        Modifier.padding(16.dp)
-                    ) {
+                // Level 2: Project Folder (Sesuai Screenshot User)
+                OutlinedTextField(
+                    value = uiState.mainFolder,
+                    onValueChange = { viewModel.saveMainFolder(it) },
+                    label = { Text("Folder Project (Level 2)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    leadingIcon = { Icon(Icons.Default.CreateNewFolder, null) }
+                )
 
-                        Text(
-                            "Export",
-                            style = MaterialTheme.typography.titleMedium
-                        )
+                Spacer(Modifier.height(16.dp))
 
-                        Spacer(Modifier.height(12.dp))
+                // Level 3: Prefix Part
+                OutlinedTextField(
+                    value = uiState.partFolder,
+                    onValueChange = { viewModel.savePartFolder(it) },
+                    label = { Text("Prefix Nama Part (Level 3)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    placeholder = { Text("Contoh: Part") },
+                    supportingText = { Text("Akan menjadi ${uiState.partFolder}1, dst.") }
+                )
 
-                        OutlinedTextField(
-                            value = fileSuffix,
-                            onValueChange = {
-                                viewModel.saveFileSuffix(it)
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = {
-                                Text("Tambahan Nama File")
-                            },
-                            supportingText = {
-                                Text("Contoh : IMG_8244_${fileSuffix}.jpg")
-                            },
-                            leadingIcon = {
-                                Icon(Icons.Default.Image, null)
+                Spacer(Modifier.height(16.dp))
+
+                // Penamaan File: Nama Tambahan
+                OutlinedTextField(
+                    value = uiState.fileSuffix,
+                    onValueChange = { viewModel.saveFileSuffix(it) },
+                    label = { Text("Nama Tambahan File") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    leadingIcon = { Icon(Icons.Default.DriveFileRenameOutline, null) },
+                    supportingText = {
+                        val previewName =
+                            if (uiState.fileSuffix.isBlank()) {
+                                "IMG_01.jpg"
+                            } else {
+                                "IMG_01_${uiState.fileSuffix}.jpg"
                             }
-                        )
 
-                        Spacer(Modifier.height(12.dp))
-
-                        OutlinedTextField(
-                            value = resizePercent,
-                            onValueChange = {
-
-                                val value = it.filter(Char::isDigit)
-
-                                if (value.length <= 3) {
-                                    viewModel.saveResizePercent(value)
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Number
-                            ),
-                            label = {
-                                Text("Resolusi Export (%)")
-                            },
-                            supportingText = {
-                                Text("Masukkan nilai 1 - 100")
-                            }
-                        )
-
-                        Spacer(Modifier.height(12.dp))
-
-                        OutlinedTextField(
-                            value = maxPhotoPerFolder,
-                            onValueChange = {
-                                val value = it.filter(Char::isDigit)
-
-                                if (value.length <= 5) {
-                                    viewModel.saveMaxPhoto(value)
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Number
-                            ),
-                            label = {
-                                Text("Maksimum Foto per Folder")
-                            },
-                            supportingText = {
-                                Text("Folder otomatis pindah ke part berikutnya")
-                            }
-                        )
-
+                        Text("Contoh: $previewName")
                     }
-
-                }
+                )
             }
+
+            // 3. Limit & Kualitas
             item {
+                Text("Limit & Kualitas", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.height(12.dp))
 
+                OutlinedTextField(
+                    value = uiState.maxPhotoPerFolder,
+                    onValueChange = {
+                        val value = it.filter(Char::isDigit)
+                        if (value.length <= 5) viewModel.saveMaxPhoto(value)
+                    },
+                    label = { Text("Jumlah Foto per Folder") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    leadingIcon = { Icon(Icons.Default.Numbers, null) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
 
-                ElevatedCard {
+                Spacer(Modifier.height(24.dp))
 
-                    Column(
-                        Modifier.padding(16.dp)
-                    ) {
-
-                        Row(
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-
-                            Column {
-
-                                Text("Upload Otomatis")
-
-                                Text(
-                                    "Upload ke Google Drive setelah export selesai",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-
-                            }
-
-                            Switch(
-                                checked = autoUpload,
-                                onCheckedChange = {
-                                    viewModel.saveAutoUpload(it)
-                                }
-                            )
-
-                        }
-
-                        Spacer(Modifier.height(12.dp))
-
-                        OutlinedTextField(
-                            value = localFolder,
-                            onValueChange = {},
-                            enabled = false,
-                            modifier = Modifier.fillMaxWidth(),
-                            label = {
-                                Text("Folder Penyimpanan Lokal")
-                            },
-                            leadingIcon = {
-                                Icon(Icons.Default.PhotoLibrary, null)
-                            },
-                            trailingIcon = {
-
-                                IconButton(
-                                    onClick = {
-
-                                        // TODO pilih folder
-
-                                    }
-                                ) {
-
-                                    Icon(Icons.Default.Folder, null)
-
-                                }
-
-                            }
-
-                        )
-
-                    }
-
-                }
+                Text("Resolusi Export: ${uiState.resizePercent}%", style = MaterialTheme.typography.bodyMedium)
+                Slider(
+                    value = uiState.resizePercent.toFloatOrNull() ?: 100f,
+                    onValueChange = { viewModel.saveResizePercent(it.toInt().toString()) },
+                    valueRange = 10f..100f,
+                    steps = 9
+                )
             }
+
+            // Preview Section
             item {
-
-
-                ElevatedCard {
-
-                    Column(
-                        Modifier.padding(16.dp)
-                    ) {
-
-                        Text(
-                            "Preview",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-
-                        Spacer(Modifier.height(8.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("Preview Lokasi Cloud:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        val previewFile =
+                            if (uiState.fileSuffix.isBlank()) {
+                                "IMG_01.jpg"
+                            } else {
+                                "IMG_01_${uiState.fileSuffix}.jpg"
+                            }
 
                         Text(
-                            """
-📂 $mainFolder
- └── ${partFolder}1
-      ├── IMG_8244_${fileSuffix}.jpg
-      ├── IMG_8245_${fileSuffix}.jpg
-      ├── IMG_8246_${fileSuffix}.jpg
-      └── dst...
-
-📦 Maksimum ${maxPhotoPerFolder} foto/folder
-
-Setelah penuh:
-
-📂 ${partFolder}2
-      ├── IMG_8445_${fileSuffix}.jpg
-      ├── IMG_8446_${fileSuffix}.jpg
-      └── dst...
-""".trimIndent()
+                            "My Drive / ${uiState.rootFolder} / ${uiState.mainFolder} / ${uiState.partFolder}1 / $previewFile",
+                                    style = MaterialTheme.typography.bodySmall,
+                            color = Color.DarkGray
                         )
 
 
                     }
-
                 }
             }
-
         }
-
     }
-
 }

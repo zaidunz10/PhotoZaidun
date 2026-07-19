@@ -1,17 +1,9 @@
 package com.zaidun.photozaidun.presentation.screen.home
 
-import android.app.Activity
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.IntentSenderRequest
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -19,21 +11,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.google.android.gms.auth.api.identity.Identity
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import timber.log.Timber
+import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,437 +29,187 @@ fun HomeScreen(
     onNavigateToFolderPicker: () -> Unit,
     onNavigateToWatermark: () -> Unit
 ) {
-    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
-    val activity = context as Activity
-    val scope = rememberCoroutineScope()
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    val launcher =
-        rememberLauncherForActivityResult(
-            ActivityResultContracts.StartIntentSenderForResult()
-        ) { result ->
-
-            if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
-
-            try {
-
-                val authorizationResult =
-                    Identity.getAuthorizationClient(activity)
-                        .getAuthorizationResultFromIntent(result.data)
-
-                val accessToken = authorizationResult.accessToken
-                scope.launch {
-                    // 1. Simpan token lewat ViewModel
-                    viewModel.onAccessTokenReceived(accessToken)
-
-                    // 2. Beri jeda 1 detik agar DataStore benar-benar selesai menulis ke disk
-                    delay(1000)
-
-                    // 3. Baru jalankan proses
-                    viewModel.startBatchProcess()
-                    Timber.d("Batch Process Started after delay")
-                }
-
-            } catch (e: Exception) {
-
-                Timber.e(e)
-                scope.launch {
-                    snackbarHostState.showSnackbar("Gagal memproses otorisasi Google Drive")
-                }
-
-            }
-
-        }
 
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
-                    Text(
-                        text = "Photo Zaidun",
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
-                )
+                    Text("Photo Zaidun", fontWeight = FontWeight.Bold)
+                }
             )
-        },
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        containerColor = MaterialTheme.colorScheme.background
+        }
     ) { padding ->
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 20.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 16.dp)
         ) {
-            // Dashboard Summary Card
-            item(span = { GridItemSpan(2) }) {
-                DashboardSummaryCard(
-                    totalImages = uiState.totalImages,
-                    processedImages = uiState.processedImages,
-                    isProcessing = uiState.isProcessing,
-                    progress = uiState.progress,
-                    onPickFolderClick = onNavigateToFolderPicker
-                )
-            }
-
-            item(span = { GridItemSpan(2) }) {
-                Text(
-                    text = "Aksi Cepat",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
-                )
-            }
-
-            // Action Buttons
-            item {
-                ActionCard(
-                    title = "Pilih Folder",
-                    icon = Icons.Default.Folder,
-                    onClick = onNavigateToFolderPicker,
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            }
-            item {
-                ActionCard(
-                    title = "Watermark",
-                    icon = Icons.Default.Brush,
-                    onClick = onNavigateToWatermark,
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-            }
-            item {
-                ActionCard(
-                    title = "Riwayat",
-                    icon = Icons.Default.History,
-                    onClick = onNavigateToHistory,
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-            }
-            item {
-                ActionCard(
-                    title = "Pengaturan",
-                    icon = Icons.Default.Settings,
-                    onClick = onNavigateToSettings,
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            // Start Batch Button
-            item(span = { GridItemSpan(2) }) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Button(
-                        onClick = {
-
-                            viewModel.requestDrivePermission(
-                                activity = activity,
-
-                                onNeedUserConsent = { sender ->
-
-                                    launcher.launch(
-                                        IntentSenderRequest.Builder(sender).build()
-                                    )
-
-                                },
-
-                                onError = {
-
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar("Gagal memulai proses ekspor")
-                                    }
-
-                                }
-
-                            )
-
-                        },
-
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-
-                        shape = RoundedCornerShape(16.dp),
-
-                        enabled = uiState.totalImages > 0 && !uiState.isProcessing
-                    ) {
-
-                        if (uiState.isProcessing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = "Memproses...",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        } else {
-                            Icon(Icons.Default.PlayArrow, null)
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = "Mulai Export",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-
-                    }
-
-                    AnimatedVisibility(visible = uiState.totalImages == 0) {
-                        Text(
-                            text = "Pilih folder foto terlebih dahulu",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 8.dp)
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun DashboardSummaryCard(
-    totalImages: Int,
-    processedImages: Int,
-    isProcessing: Boolean,
-    progress: Float,
-    onPickFolderClick: () -> Unit
-) {
-    val isEmpty = totalImages == 0
-    val isDone = !isProcessing && !isEmpty && processedImages >= totalImages
-    val animatedProgress by animateFloatAsState(targetValue = progress, label = "export_progress")
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isDone) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant
-            }
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(
-                    text = "Ringkasan Batch",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                StatusChip(isEmpty = isEmpty, isProcessing = isProcessing, isDone = isDone)
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (isEmpty) {
-                Icon(
-                    imageVector = Icons.Default.PhotoLibrary,
-                    contentDescription = null,
-                    modifier = Modifier.size(36.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Belum ada foto dipilih",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(14.dp))
-                FilledTonalButton(onClick = onPickFolderClick) {
-                    Icon(
-                        imageVector = Icons.Default.Folder,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Pilih Folder")
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    StatColumn(value = totalImages, label = "Total Foto")
-                    StatColumn(value = processedImages, label = "Selesai")
-                    StatColumn(
-                        value = (totalImages - processedImages).coerceAtLeast(0),
-                        label = "Tersisa"
-                    )
-                }
-
-                if (isProcessing) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    LinearProgressIndicator(
-                        progress = { animatedProgress },
+                // 1. Card Ringkasan Batch (Sesuai Screenshot V2)
+                item(span = { GridItemSpan(2) }) {
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Sedang memproses... ${(progress * 100).toInt()}%",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                } else if (isDone) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
+                            .padding(vertical = 12.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFEBE9F1) // Warna background card di screenshot
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Semua foto berhasil diproses",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Medium
-                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .padding(24.dp)
+                                .fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "Ringkasan Batch",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Surface(
+                                    color = Color.LightGray.copy(alpha = 0.5f),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text(
+                                        if (uiState.totalImages > 0) "${uiState.totalImages} Foto" else "Kosong",
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+
+                            Spacer(Modifier.height(32.dp))
+
+                            Icon(
+                                Icons.Default.Image,
+                                contentDescription = null,
+                                modifier = Modifier.size(56.dp),
+                                tint = Color.Gray.copy(alpha = 0.6f)
+                            )
+
+                            Spacer(Modifier.height(16.dp))
+
+                            Text(
+                                if (uiState.totalImages > 0) "Siap untuk diproses" else "Belum ada foto dipilih",
+                                color = Color.Gray,
+                                fontSize = 14.sp
+                            )
+
+                            Spacer(Modifier.height(20.dp))
+
+                            Button(
+                                onClick = onNavigateToFolderPicker,
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.White,
+                                    contentColor = Color.Black
+                                )
+                            ) {
+                                Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Pilih Folder", fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
+                }
+
+                // 2. Section Aksi Cepat
+                item(span = { GridItemSpan(2) }) {
+                    Text(
+                        "Aksi Cepat",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+
+                item { ActionCardV2("Pilih Folder", Icons.Default.Folder, Color(0xFFDED9F5), onNavigateToFolderPicker) }
+                item { ActionCardV2("Watermark", Icons.Default.Brush, Color(0xFFF7D9E3), onNavigateToWatermark) }
+                item { ActionCardV2("Riwayat", Icons.Default.History, Color(0xFFDED9F5), onNavigateToHistory) }
+                item { ActionCardV2("Pengaturan", Icons.Default.Settings, Color(0xFFD9E9F7), onNavigateToSettings) }
+            }
+
+            // 3. Tombol Export di Bawah (Sticky)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Button(
+                    onClick = { viewModel.onEvent(HomeEvent.StartProcess) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    enabled = uiState.totalImages > 0,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        disabledContainerColor = Color.LightGray.copy(alpha = 0.5f)
+                    )
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Mulai Export", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
+
+                if (uiState.totalImages == 0) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Pilih folder foto terlebih dahulu",
+                        color = Color.Red.copy(alpha = 0.8f),
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
+                    )
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun StatColumn(value: Int, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = "$value",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun StatusChip(isEmpty: Boolean, isProcessing: Boolean, isDone: Boolean) {
-    val label: String
-    val containerColor: Color
-    val contentColor: Color
-
-    when {
-        isProcessing -> {
-            label = "Memproses"
-            containerColor = MaterialTheme.colorScheme.primary
-            contentColor = MaterialTheme.colorScheme.onPrimary
-        }
-        isDone -> {
-            label = "Selesai"
-            containerColor = MaterialTheme.colorScheme.primary
-            contentColor = MaterialTheme.colorScheme.onPrimary
-        }
-        isEmpty -> {
-            label = "Kosong"
-            containerColor = MaterialTheme.colorScheme.outlineVariant
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-        }
-        else -> {
-            label = "Siap"
-            containerColor = MaterialTheme.colorScheme.tertiary
-            contentColor = MaterialTheme.colorScheme.onTertiary
-        }
-    }
-
-    Surface(
-        shape = RoundedCornerShape(50),
-        color = containerColor
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = contentColor,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-        )
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ActionCard(
-    title: String,
-    icon: ImageVector,
-    onClick: () -> Unit,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceVariant,
-    contentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant
-) {
-    ElevatedCard(
+fun ActionCardV2(title: String, icon: ImageVector, color: Color, onClick: () -> Unit) {
+    Card(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .height(108.dp),
-        shape = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
+            .height(110.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF6F5FB))
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp),
+            modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(containerColor),
-                contentAlignment = Alignment.Center
+            Surface(
+                modifier = Modifier.size(44.dp),
+                shape = RoundedCornerShape(14.dp),
+                color = color
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = contentColor,
-                    modifier = Modifier.size(22.dp)
+                    tint = Color.Black,
+                    modifier = Modifier.padding(12.dp)
                 )
             }
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Medium
-            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(text = title, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         }
     }
 }

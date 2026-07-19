@@ -6,7 +6,7 @@ import android.provider.DocumentsContract
 import com.zaidun.photozaidun.domain.model.PhotoItem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
-
+import timber.log.Timber
 class CursorScanner(
 
     private val resolver: ContentResolver
@@ -15,7 +15,9 @@ class CursorScanner(
 
     fun scan(
         treeUri: Uri
+
     ): Flow<PhotoItem> = flow {
+        Timber.tag("Scanner").d("Memulai scanning folder: $treeUri")
 
         val queue = FolderQueue()
 
@@ -85,6 +87,7 @@ class CursorScanner(
 
                         mime ==
                                 DocumentsContract.Document.MIME_TYPE_DIR -> {
+                            Timber.tag("Scanner").d("Menemukan gambar: $documentId")
 
                             queue.enqueue(
                                 documentId

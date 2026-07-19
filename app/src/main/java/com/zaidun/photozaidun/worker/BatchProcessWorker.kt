@@ -14,150 +14,141 @@ import com.zaidun.photozaidun.data.processor.BitmapProcessor
 import com.zaidun.photozaidun.domain.model.*
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import timber.log.Timber
 import kotlinx.coroutines.flow.first
+import timber.log.Timber
+
 @HiltWorker
 class BatchProcessWorker @AssistedInject constructor(
-    @Assisted appContext: Context,
-    @Assisted workerParams: WorkerParameters,
+    @Assisted context: Context,
+    @Assisted params: WorkerParameters,
     private val preferences: UserPreferencesDataStore
-) : CoroutineWorker(appContext, workerParams) {
+) : CoroutineWorker(context, params) {
+
     override suspend fun doWork(): Result {
-        val maxPhoto = preferences.maxPhotoPerFolder.first()
-        val suffix = preferences.fileSuffix.first()
-        val partPrefix = preferences.partFolder.first()
+        val inputFolderUriStr = inputData.getString("input_folder") ?: return Result.failure()
+        val inputFolder = DocumentFile.fromTreeUri(applicationContext, Uri.parse(inputFolderUriStr)) ?: return Result.failure()
+
+        // 1. Ambil Pengaturan dari DataStore
+        val mainFolderName = preferences.mainFolder.first() // Misal: "Wedding JONAS"
+        val partPrefix = preferences.partFolder.first()      // Misal: "Part"
+        val maxPhotos = preferences.maxPhotoPerFolder.first() // Misal: 200
+
+        val wmUri = preferences.watermarkUri.first()
+        val wmOpacity = preferences.watermarkOpacity.first()
+        val wmScale = preferences.watermarkScale.first()
+        val wmPos = preferences.watermarkPosition.first()
+        val wmText = preferences.watermarkText.first()
 
         val resize = preferences.resizePercent.first()
         val quality = preferences.jpegQuality.first()
-        val inputFolderStr = inputData.getString("input_folder") ?: return Result.failure()
-        val inputFolderUri = Uri.parse(inputFolderStr)
-        val inputFolder =
-            DocumentFile.fromTreeUri(applicationContext, inputFolderUri) ?: return Result.failure()
+        val suffix = preferences.fileSuffix.first()
+        Timber.tag("DriveDr").d("Suffix dari DataStore = '$suffix'")
+
+
+
+
+
+        // 2. Siapkan Folder Output Utama di HP (Lokal)
+        // Kita buat folder hasil di dalam folder input agar mudah ditemukan
+        val outputBaseFolder = inputFolder.createDirectory(mainFolderName) ?: inputFolder
 
         val processor = BitmapProcessor(applicationContext)
-        val wmUri = preferences.watermarkUri.first().takeIf { it.isNotBlank() }?.let(Uri::parse)
-
-        val opacity = preferences.watermarkOpacity.first()
-
-        val scale = preferences.watermarkScale.first()
-
-        val position = preferences.watermarkPosition.first()
-
-
-        val imageFiles = inputFolder.listFiles().filter { file ->
-            val isImage = file.type?.startsWith("image/") == true
-
-            // Jika user input "zaidunz", maka file yang sudah ada nama "zaidunz" akan diabaikan
-            val isAlreadyProcessed = suffix.isNotBlank() && file.name?.contains(suffix) == true
-
-            isImage && !isAlreadyProcessed
+        val imageFiles = inputFolder.listFiles().filter {
+            it.type?.startsWith("image/") == true
         }
 
-        // 3. Ambil Nama Folder Utama dari Settings
-        val mainFolderName = preferences.mainFolder.first()
-
-        // Folder induk untuk part-part adalah folder utama, jika kosong gunakan inputFolder
-        val targetParentFolder = if (mainFolderName.isNotBlank()) {
-            inputFolder.findFile(mainFolderName) ?: inputFolder.createDirectory(mainFolderName) ?: inputFolder
-        } else {
-            inputFolder
-        }
         var photoCount = 0
         var currentPart = 1
-        val batchId = System.currentTimeMillis()
-        var currentOutputFolder = targetParentFolder.createDirectory("${partPrefix}_${currentPart}_$batchId")?: return Result.failure()
-        val autoUpload = preferences.autoUpload.first()
-        Timber.tag("BatchProcess").d("Auto Upload = $autoUpload")
-
+        var currentOutputFolder = outputBaseFolder.createDirectory("${partPrefix}$currentPart")
 
         imageFiles.forEach { file ->
-            try {
-                if (photoCount >= maxPhoto) {
-                    val folderToUpload = currentOutputFolder?.uri
+            val originalName = file.name ?: "image.jpg"
 
-                    if (autoUpload) {
-                        triggerDriveUpload(folderToUpload)
+            val dotIndex = originalName.lastIndexOf('.')
+
+            val newName = if (dotIndex != -1) {
+                val baseName = originalName.substring(0, dotIndex)
+                val extension = originalName.substring(dotIndex)
+
+                if (suffix.isBlank()) {
+                    baseName + extension
+                } else {
+                    "${baseName}_$suffix$extension"
+                }
+            } else {
+                if (suffix.isBlank()) {
+                    originalName
+                } else {
+                    "${originalName}_$suffix"
+                }
+            }
+            try {
+                // Logic Splitting Folder V2
+                if (photoCount >= maxPhotos) {
+                    // Trigger Upload Folder Part yang sudah penuh ke Drive jika Auto Upload aktif
+                    if (preferences.autoUpload.first()) {
+                        triggerDriveUpload(currentOutputFolder?.uri, mainFolderName)
                     }
 
                     currentPart++
-
-                    currentOutputFolder = targetParentFolder.createDirectory("${partPrefix}_${currentPart}_$batchId")?: return Result.failure()
+                    currentOutputFolder = outputBaseFolder.createDirectory("${partPrefix}$currentPart")
                     photoCount = 0
                 }
-
-                // 1. Definisikan newName di luar blok IF agar bisa diakses di bawah
-                val originalName = file.name ?: "image"
-                val newName = if (suffix.isNotBlank()) {
-                    val baseName = originalName.substringBeforeLast(".")
-                    val extension = originalName.substringAfterLast(".", "jpg")
-                    "${baseName}_${suffix}.$extension"
-                } else {
-                    originalName
-                }
-
                 val outputFile = currentOutputFolder?.createFile(
                     file.type ?: "image/jpeg",
                     newName
                 )
-
-                // 2. Jalankan proses Bitmap
                 outputFile?.uri?.let { outUri ->
                     applicationContext.contentResolver.openOutputStream(outUri)?.use { outStream ->
-
-                        val watermarkPosition = try {
-                            WatermarkPosition.valueOf(position)
-                        } catch (e: Exception) {
-                            WatermarkPosition.BOTTOM_RIGHT
-                        }
-                        processor.process(
-                            file.uri,
+                        val watermarkConfig = if (wmUri.isNotBlank()) {
                             WatermarkConfig(
                                 type = WatermarkType.IMAGE,
-                                imageUri = wmUri,
-                                text = "",
-                                opacity = opacity,
-                                size = scale,
-                                position = watermarkPosition,
-                                marginX = 0.02f,
-                                marginY = 0.02f
-                            ),
+                                imageUri = Uri.parse(wmUri),
+                                opacity = wmOpacity,
+                                size = wmScale,
+                                position = WatermarkPosition.valueOf(wmPos)
+                            )
+                        } else {
+                            WatermarkConfig(
+                                type = WatermarkType.TEXT,
+                                text = wmText,
+                                opacity = wmOpacity,
+                                size = wmScale,
+                                position = WatermarkPosition.valueOf(wmPos)
+                            )
+                        }
+
+                        processor.process(
+                            file.uri,
+                            watermarkConfig,
                             ResizeConfig(percentage = resize),
                             CompressionConfig(quality = quality),
                             outStream
                         )
                     }
                 }
-
-                photoCount++ // Jangan lupa tambah count
+                photoCount++
             } catch (e: Exception) {
                 Timber.e(e, "Gagal memproses file: ${file.name}")
             }
         }
 
-        // --- TRIGGER UNTUK PART TERAKHIR (SISANYA) ---
-        // Hapus "com.zaidun.photozaidun.worker." karena ini variabel lokal
-        if (autoUpload && photoCount > 0) {
-            triggerDriveUpload(currentOutputFolder?.uri)
+        // Upload Part Terakhir
+        if (preferences.autoUpload.first()) {
+            triggerDriveUpload(currentOutputFolder?.uri, mainFolderName)
         }
 
         return Result.success()
-
     }
 
-
-    // Fungsi pembantu untuk trigger worker upload
-    private fun triggerDriveUpload(folderUri: Uri?) {
-        Timber.tag("BatchProcess").d("triggerDriveUpload() dipanggil")
+    private fun triggerDriveUpload(folderUri: Uri?, driveParentFolder: String) {
         if (folderUri == null) return
-
         val uploadRequest = OneTimeWorkRequestBuilder<DriveUploadWorker>()
-            .setInputData(workDataOf("folder_uri" to folderUri.toString()))
-            .addTag("UPLOAD_DRIVE")
+            .setInputData(workDataOf(
+                "folder_uri" to folderUri.toString(),
+                "drive_folder_name" to driveParentFolder
+            ))
             .build()
-
         WorkManager.getInstance(applicationContext).enqueue(uploadRequest)
-        Timber.d(
-            "Folder Part telah penuh foto"
-        )
     }
 }

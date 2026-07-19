@@ -21,7 +21,7 @@ fun SplashRoute(
 
         delay(1800)
 
-        navController.navigate(Screen.Home.route) {
+        navController.navigate("main") {
 
             popUpTo(Screen.Splash.route) {
                 inclusive = true

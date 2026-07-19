@@ -106,7 +106,7 @@ class GoogleAuthManager@Inject constructor(@ApplicationContext private val conte
         val request = AuthorizationRequest.builder()
             .setRequestedScopes(
                 listOf(
-                    Scope(Scopes.DRIVE_FILE)
+                    Scope("https://www.googleapis.com/auth/drive")
                 )
             )
             .build()
@@ -146,7 +146,7 @@ class GoogleAuthManager@Inject constructor(@ApplicationContext private val conte
         val authorizationRequest = AuthorizationRequest.builder()
             .setRequestedScopes(
                 listOf(
-                    Scope(Scopes.DRIVE_FILE)
+                    Scope("https://www.googleapis.com/auth/drive")
                 )
             )
             .build()

@@ -25,6 +25,7 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
         private val USER_NAME_KEY = stringPreferencesKey("user_name")
         private val USER_EMAIL_KEY = stringPreferencesKey("user_email")
 
+        private val ROOT_FOLDER = stringPreferencesKey("root_folder")
         private val MAIN_FOLDER = stringPreferencesKey("main_folder")
         private val PART_FOLDER = stringPreferencesKey("part_folder")
         private val FILE_SUFFIX = stringPreferencesKey("file_suffix")
@@ -44,7 +45,7 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
         private val DRIVE_ACCESS_TOKEN = stringPreferencesKey("drive_access_token")
 
     }
-    // Flow untuk mengambil data (pindahkan ke level class agar bisa akses context.dataStore)
+
     val userId: Flow<String> = context.dataStore.data.map { it[USER_ID_KEY] ?: "" }
     val userName: Flow<String> = context.dataStore.data.map { it[USER_NAME_KEY] ?: "" }
     val userEmail: Flow<String> = context.dataStore.data.map { it[USER_EMAIL_KEY] ?: "" }
@@ -77,7 +78,7 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
     suspend fun saveMainFolder(value: String) {
         context.dataStore.edit { it[MAIN_FOLDER] = value }
     }
-
+    suspend fun saveRootFolder(value: String) { context.dataStore.edit { it[ROOT_FOLDER] = value } }
     suspend fun savePartFolder(value: String) {
         context.dataStore.edit { it[PART_FOLDER] = value }
     }
@@ -136,11 +137,12 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
 
     // Expose Flows
     val watermarkText: Flow<String> = context.dataStore.data.map { it[WATERMARK_TEXT] ?: "" }
+    val rootFolder: Flow<String> = context.dataStore.data.map { it[ROOT_FOLDER] ?: "Folder indux Mu" }
     val previewImageUri: Flow<String> = context.dataStore.data.map { it[PREVIEW_IMAGE_URI] ?: "" }
     val watermarkUri: Flow<String> = context.dataStore.data.map { it[WATERMARK_URI] ?: "" }
     val watermarkScale: Flow<Float> = context.dataStore.data.map { it[WATERMARK_SCALE] ?: 1.0f }
-    val mainFolder: Flow<String> = context.dataStore.data.map { it[MAIN_FOLDER] ?: "Customer" }
-    val partFolder: Flow<String> = context.dataStore.data.map { it[PART_FOLDER] ?: "part" }
+    val mainFolder: Flow<String> = context.dataStore.data.map { it[MAIN_FOLDER] ?: "" }
+    val partFolder: Flow<String> = context.dataStore.data.map { it[PART_FOLDER] ?: "" }
     val fileSuffix: Flow<String> = context.dataStore.data.map { it[FILE_SUFFIX] ?: "" }
     val maxPhotoPerFolder: Flow<Int> = context.dataStore.data.map { it[MAX_PHOTO_PER_FOLDER] ?: 200 }
     val watermarkPosition: Flow<String> = context.dataStore.data.map { it[WATERMARK_POSITION] ?: "BOTTOM_RIGHT" }
