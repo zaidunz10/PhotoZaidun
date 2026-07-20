@@ -18,6 +18,15 @@ class SettingsViewModel @Inject constructor(
     private val preferences: UserPreferencesDataStore,
     private val googleAuthManager: GoogleAuthManager
 ) : ViewModel() {
+    fun saveAutoUpload(value: Boolean) {
+        _uiState.update {
+            it.copy(autoUpload = value)
+        }
+
+        viewModelScope.launch {
+            preferences.saveAutoUpload(value)
+        }
+    }
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState = _uiState.asStateFlow()

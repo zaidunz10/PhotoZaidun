@@ -1,6 +1,7 @@
 package com.zaidun.photozaidun.data.local.datastore
 
 import android.content.Context
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
@@ -41,6 +42,7 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
         private val DARK_MODE = booleanPreferencesKey("dark_mode")
         private val LAST_FOLDER = stringPreferencesKey("last_folder")
         private val PREVIEW_IMAGE_URI = stringPreferencesKey("preview_image_uri")
+        private val SHOW_FILENAME = booleanPreferencesKey("show_filename")
 
         private val DRIVE_ACCESS_TOKEN = stringPreferencesKey("drive_access_token")
 
@@ -94,6 +96,10 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
     suspend fun saveWatermarkText(value: String) {
         context.dataStore.edit { it[WATERMARK_TEXT] = value }
     }
+    suspend fun saveShowFilename(value: Boolean) {
+        context.dataStore.edit { it[SHOW_FILENAME] = value }
+    }
+
 
     suspend fun saveWatermarkUri(value: String) {
         context.dataStore.edit { it[WATERMARK_URI] = value }
@@ -137,6 +143,10 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
 
     // Expose Flows
     val watermarkText: Flow<String> = context.dataStore.data.map { it[WATERMARK_TEXT] ?: "" }
+    val showFilename: Flow<Boolean> =
+        context.dataStore.data.map { prefs ->
+            prefs[SHOW_FILENAME] ?: false
+        }
     val rootFolder: Flow<String> = context.dataStore.data.map { it[ROOT_FOLDER] ?: "Folder indux Mu" }
     val previewImageUri: Flow<String> = context.dataStore.data.map { it[PREVIEW_IMAGE_URI] ?: "" }
     val watermarkUri: Flow<String> = context.dataStore.data.map { it[WATERMARK_URI] ?: "" }

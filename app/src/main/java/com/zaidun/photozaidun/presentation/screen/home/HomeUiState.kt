@@ -22,5 +22,8 @@ data class HomeUiState(
 
     val uploadToDrive: Boolean = false,
 
-    val darkMode: Boolean = false
+    val darkMode: Boolean = false,
+    val currentFilename: String = "",
+    val current: Int = 0,
+    val total: Int = 0
 )

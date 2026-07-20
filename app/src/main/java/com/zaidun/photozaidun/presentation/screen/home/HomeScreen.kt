@@ -1,5 +1,7 @@
 package com.zaidun.photozaidun.presentation.screen.home
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -20,8 +22,20 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.lazy.grid.items // PENTING: Untuk looping list foto
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale    // PENTING: Untuk ContentScale.Crop
 import coil3.compose.AsyncImage                 // Untuk menampilkan gambar
+import com.zaidun.photozaidun.presentation.navigation.Screen
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.time.delay
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlin.time.Duration.Companion.milliseconds
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -29,11 +43,22 @@ fun HomeScreen(
     sharedFolderViewModel: com.zaidun.photozaidun.presentation.shared.SharedFolderViewModel,
     onNavigateToHistory: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToExportLoading: () -> Unit,
     onNavigateToFolderPicker: () -> Unit,
     onNavigateToWatermark: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val photos by sharedFolderViewModel.photos.collectAsState()
+    val coroutineScope = rememberCoroutineScope()
+    var pressed by remember {
+        mutableStateOf(false)
+    }
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.95f else 1f,
+        animationSpec = tween(120),
+        label = "buttonScale"
+    )
+
 
     Scaffold(
         topBar = {
@@ -180,10 +205,22 @@ fun HomeScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Button(
-                    onClick = { viewModel.onEvent(HomeEvent.StartProcess) },
+                    onClick = {
+
+                        viewModel.startBatchProcess()
+
+                        onNavigateToExportLoading()
+
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp),
+                        .height(56.dp)
+                        .graphicsLayer {
+
+                            scaleX = scale
+
+                            scaleY = scale
+                        },
                     enabled = uiState.totalImages > 0,
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
@@ -216,6 +253,7 @@ fun HomeScreen(
 
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

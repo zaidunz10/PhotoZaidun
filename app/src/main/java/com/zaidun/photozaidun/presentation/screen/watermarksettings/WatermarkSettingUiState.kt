@@ -9,6 +9,7 @@ data class WatermarkSettingsUiState(
 
     val scale: Float = .2f,
 
-    val position: String = "BOTTOM_RIGHT"
+    val position: String = "BOTTOM_RIGHT",
+    val showFilename: Boolean = false
 
 )

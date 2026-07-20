@@ -1,6 +1,5 @@
 package com.zaidun.photozaidun.presentation.navigation
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import com.zaidun.photozaidun.presentation.screen.contact.ContactScreen
@@ -11,13 +10,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -35,7 +28,8 @@ fun MainScreen(
     homeViewModel: HomeViewModel,
     sharedFolderViewModel: SharedFolderViewModel,
     onNavigateToFolderPicker: () -> Unit,
-    onNavigateToHistory: () -> Unit
+    onNavigateToHistory: () -> Unit,
+    onNavigateToExportLoading: () -> Unit
 ) {
     val navController = rememberNavController()
     val items = listOf(
@@ -85,6 +79,7 @@ fun MainScreen(
         ) {
             composable(Screen.Home.route) {
                 HomeScreen(
+                    onNavigateToExportLoading = onNavigateToExportLoading,
                     viewModel = homeViewModel,
                     sharedFolderViewModel = sharedFolderViewModel,
                     onNavigateToHistory = onNavigateToHistory,
@@ -102,6 +97,7 @@ fun MainScreen(
                     composable(Screen.Contact.route) {
                         ContactScreen()
                     }
+
         }
     }
 }

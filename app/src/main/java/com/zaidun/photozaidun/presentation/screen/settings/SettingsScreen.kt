@@ -130,6 +130,44 @@ fun SettingsScreen(
                     }
                 )
             }
+            item {
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+
+                            Text(
+                                "Upload Otomatis ke Google Drive",
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Text(
+                                "Setelah export selesai, folder akan langsung diupload ke Google Drive.",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+
+                        Switch(
+                            checked = uiState.autoUpload,
+                            onCheckedChange = {
+                                viewModel.saveAutoUpload(it)
+                            }
+                        )
+                    }
+                }
+            }
 
 
             // 2. 3 Level Folder + Nama Tambahan

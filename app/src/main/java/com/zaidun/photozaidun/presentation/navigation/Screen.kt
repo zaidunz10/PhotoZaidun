@@ -11,6 +11,7 @@ sealed class Screen(val route: String) {
     data object Watermark : Screen("watermark")
 
     data object Resize : Screen("resize")
+    object ExportLoading : Screen("export_loading")
 
     data object Compression : Screen("compression")
 
@@ -18,7 +19,6 @@ sealed class Screen(val route: String) {
 
     data object Progress : Screen("progress")
     data object History : Screen("history")
-
     data object Settings : Screen("settings")
     data object Contact : Screen("contact")
     data object Drive : Screen("drive")

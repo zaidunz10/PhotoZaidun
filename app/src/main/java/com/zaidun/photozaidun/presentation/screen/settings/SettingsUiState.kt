@@ -17,6 +17,7 @@ data class SettingsUiState(
 
     val maxPhotoPerFolder: String = "200",
 
+    val showFilename: Boolean = false,
     val autoUpload: Boolean = false
 
 )

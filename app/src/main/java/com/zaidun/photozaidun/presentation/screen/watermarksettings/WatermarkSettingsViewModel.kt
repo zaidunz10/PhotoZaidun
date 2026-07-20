@@ -21,34 +21,31 @@ class WatermarkSettingsViewModel @Inject constructor(
     val uiState: StateFlow<WatermarkSettingsUiState> =
         combine(
             preferences.watermarkUri,
-
             preferences.previewImageUri,
-
             preferences.watermarkOpacity,
-
             preferences.watermarkScale,
-
             preferences.watermarkPosition
-        ) { uri,preview, opacity, scale, position->
+        ) { uri, preview, opacity, scale, position ->
+
             WatermarkSettingsUiState(
-
                 watermarkUri = uri,
-
                 previewUri = preview,
-
                 opacity = opacity,
-
                 scale = scale,
-
                 position = position
-
             )
+
+        }.combine(preferences.showFilename) { state, showFilename ->
+
+            state.copy(
+                showFilename = showFilename
+            )
+
         }.stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5000),
             WatermarkSettingsUiState()
         )
-
 
 
     fun save(
@@ -61,7 +58,8 @@ class WatermarkSettingsViewModel @Inject constructor(
 
         scale: Float,
 
-        position: String
+        position: String,
+        showFilename: Boolean
 
     ) {
         viewModelScope.launch {
@@ -75,6 +73,7 @@ class WatermarkSettingsViewModel @Inject constructor(
             preferences.saveWatermarkScale(scale)
 
             preferences.saveWatermarkPosition(position)
+            preferences.saveShowFilename(showFilename)
             android.util.Log.d("WM_SAVE", "Selesai simpan")
         }
     }

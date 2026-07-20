@@ -97,6 +97,13 @@ android {
 
         }
     }
+
+    configurations.all {
+        resolutionStrategy {
+            force("androidx.concurrent:concurrent-futures:1.2.0")
+            force("androidx.concurrent:concurrent-futures-ktx:1.2.0")
+        }
+    }
 }
 
 dependencies {
@@ -108,6 +115,7 @@ dependencies {
     implementation(libs.androidx.exifinterface)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.material3)
+    implementation(libs.androidx.ui.graphics)
     ksp(libs.androidx.hilt.compiler)
     implementation(libs.androidx.hilt.work)
 

@@ -42,6 +42,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.style.TextAlign
 import com.zaidun.photozaidun.data.processor.watermark.WatermarkDrawer
+import com.zaidun.photozaidun.domain.model.TextPosition
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,6 +61,7 @@ fun WatermarkSettingsScreen(
     var previewUri by remember(uiState.previewUri) {
         mutableStateOf(uiState.previewUri)
     }
+    var showFilename by remember(uiState.showFilename) { mutableStateOf(uiState.showFilename) }
     var renderedPreview by remember {
         mutableStateOf<Bitmap?>(null)
     }
@@ -91,7 +93,7 @@ fun WatermarkSettingsScreen(
             }
 
         }
-    LaunchedEffect(previewUri, selectedUri, opacity, scale, position) {
+    LaunchedEffect(previewUri, selectedUri, opacity, scale, position, showFilename) {
         if (previewUri.isBlank() || selectedUri.isBlank()) {
             renderedPreview = null
             return@LaunchedEffect
@@ -106,11 +108,31 @@ fun WatermarkSettingsScreen(
             val resizedPreview = drawer.createPreview(preview)
 
             renderedPreview = drawer.draw(
-                resizedPreview,
-                logo,
-                opacity,
-                scale,
-                position
+
+                bitmap = resizedPreview,
+
+                watermark = logo,
+
+                alpha = opacity,
+
+                scale = scale,
+
+                position = position,
+
+                showFilename = showFilename,
+
+                showPart = true,
+
+                fileName = "Contoh File Gambar.jpg",
+                partName = "Part 1",
+
+
+                textSize = 0.04f,
+
+                textGap = 16f,
+
+                textPosition = TextPosition.BELOW_LOGO
+
             )
         } catch (e: SecurityException) {
             Log.e("Watermark", "Izin akses file ditolak: ${e.message}")
@@ -161,6 +183,22 @@ fun WatermarkSettingsScreen(
 
                 Text("Ukuran ${(scale * 100).toInt()}%")
                 Slider(value = scale, valueRange = 0.05f..1.0f, onValueChange = { scale = it })
+                // ... di bawah Slider ukuran ...
+                Spacer(Modifier.height(16.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showFilename = !showFilename } // Bisa klik teksnya juga
+                ) {
+                    Checkbox(
+                        checked = showFilename,
+                        onCheckedChange = { showFilename = it }
+                    )
+                    Text("Sertakan Nama File di Watermark", style = MaterialTheme.typography.bodyMedium)
+                }
+
 
                 Spacer(Modifier.height(24.dp))
 
@@ -260,7 +298,8 @@ fun WatermarkSettingsScreen(
                                 previewUri = previewUri,
                                 opacity = opacity,
                                 scale = scale,
-                                position = position
+                                position = position,
+                                showFilename = showFilename
                             )
                             Toast.makeText(
                                 context,

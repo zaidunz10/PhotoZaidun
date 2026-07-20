@@ -9,8 +9,9 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.google.common.collect.Multimaps.index
 import com.zaidun.photozaidun.data.local.datastore.UserPreferencesDataStore
-import com.zaidun.photozaidun.data.processor.BitmapProcessor
+import com.zaidun.photozaidun.data.processor.bitmap.BitmapProcessor
 import com.zaidun.photozaidun.domain.model.*
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -25,20 +26,21 @@ class BatchProcessWorker @AssistedInject constructor(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
+        Timber.tag("EXPORT").d("BATCH WORKER START")
         val inputFolderUriStr = inputData.getString("input_folder") ?: return Result.failure()
         val inputFolder = DocumentFile.fromTreeUri(applicationContext, Uri.parse(inputFolderUriStr)) ?: return Result.failure()
 
         // 1. Ambil Pengaturan dari DataStore
         val mainFolderName = preferences.mainFolder.first() // Misal: "Wedding JONAS"
-        val partPrefix = preferences.partFolder.first()      // Misal: "Part"
-        val maxPhotos = preferences.maxPhotoPerFolder.first() // Misal: 200
+        val partPrefix = preferences.partFolder.first()      // Missal: "Part"
+        val maxPhotos = preferences.maxPhotoPerFolder.first() // Missal: 200
 
         val wmUri = preferences.watermarkUri.first()
         val wmOpacity = preferences.watermarkOpacity.first()
         val wmScale = preferences.watermarkScale.first()
         val wmPos = preferences.watermarkPosition.first()
         val wmText = preferences.watermarkText.first()
-
+        val wmShowFilename = preferences.showFilename.first()
         val resize = preferences.resizePercent.first()
         val quality = preferences.jpegQuality.first()
         val suffix = preferences.fileSuffix.first()
@@ -61,7 +63,7 @@ class BatchProcessWorker @AssistedInject constructor(
         var currentPart = 1
         var currentOutputFolder = outputBaseFolder.createDirectory("${partPrefix}$currentPart")
 
-        imageFiles.forEach { file ->
+        imageFiles.forEachIndexed { index, file ->
             val originalName = file.name ?: "image.jpg"
 
             val dotIndex = originalName.lastIndexOf('.')
@@ -99,6 +101,9 @@ class BatchProcessWorker @AssistedInject constructor(
                     newName
                 )
                 outputFile?.uri?.let { outUri ->
+                    if (isStopped) {
+                        return Result.failure()
+                    }
                     applicationContext.contentResolver.openOutputStream(outUri)?.use { outStream ->
                         val watermarkConfig = if (wmUri.isNotBlank()) {
                             WatermarkConfig(
@@ -106,6 +111,7 @@ class BatchProcessWorker @AssistedInject constructor(
                                 imageUri = Uri.parse(wmUri),
                                 opacity = wmOpacity,
                                 size = wmScale,
+                                showFilename = wmShowFilename,
                                 position = WatermarkPosition.valueOf(wmPos)
                             )
                         } else {
@@ -114,16 +120,29 @@ class BatchProcessWorker @AssistedInject constructor(
                                 text = wmText,
                                 opacity = wmOpacity,
                                 size = wmScale,
-                                position = WatermarkPosition.valueOf(wmPos)
+                                position = WatermarkPosition.valueOf(wmPos),
+                                showFilename = wmShowFilename
                             )
                         }
 
+
+                        // Di dalam imageFiles.forEach { file -> ... }
                         processor.process(
-                            file.uri,
-                            watermarkConfig,
-                            ResizeConfig(percentage = resize),
-                            CompressionConfig(quality = quality),
-                            outStream
+                            inputUri = file.uri,
+                            watermarkConfig = watermarkConfig,
+                            resizeConfig = ResizeConfig(percentage = resize),
+                            fileName = newName,
+                            partName = "${partPrefix}$currentPart",
+                            compressionConfig = CompressionConfig(quality = quality),
+                            outputStream = outStream
+                        )
+                        setProgress(
+                            workDataOf(
+                                "progress" to ((index + 1) * 100 / imageFiles.size),
+                                "current" to (index + 1),
+                                "total" to imageFiles.size,
+                                "filename" to (file.name ?: "")
+                            )
                         )
                     }
                 }

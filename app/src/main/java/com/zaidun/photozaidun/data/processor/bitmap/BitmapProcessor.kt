@@ -1,80 +1,194 @@
 package com.zaidun.photozaidun.data.processor.bitmap
-
 import android.content.Context
 import android.graphics.*
 import android.net.Uri
+import androidx.exifinterface.media.ExifInterface
+import com.zaidun.photozaidun.data.processor.watermark.WatermarkDrawer
+import com.zaidun.photozaidun.domain.model.*
+import timber.log.Timber
 import java.io.OutputStream
 
-// Sediakan enum/data class ini di domain model jika ingin lebih rapi
-enum class ResizeMode { PERCENTAGE, EXACT }
-enum class OutputFormat { JPEG, PNG, WEBP }
-
-data class WatermarkConfig(
-    val text: String = "Photo Zaidun",
-    val opacity: Float = 0.8f,
-    val size: Float = 0.2f
-)
-
-data class ResizeConfig(
-    val mode: ResizeMode = ResizeMode.PERCENTAGE,
-    val percentage: Int = 80
-)
-
-data class CompressionConfig(
-    val quality: Int = 85,
-    val format: OutputFormat = OutputFormat.JPEG
-)
 
 class BitmapProcessor(private val context: Context) {
     fun process(
         inputUri: Uri,
         watermarkConfig: WatermarkConfig,
         resizeConfig: ResizeConfig,
+        fileName: String,
+        partName: String,
         compressionConfig: CompressionConfig,
         outputStream: OutputStream
     ) {
-        val inputStream = context.contentResolver.openInputStream(inputUri)
-        var bitmap = BitmapFactory.decodeStream(inputStream)
-        inputStream?.close() ?: return
 
-        // 1. Resize
-        bitmap = resize(bitmap, resizeConfig)
 
-        // 2. Watermark
-        bitmap = applyWatermark(bitmap, watermarkConfig)
+        var bitmap: Bitmap? = null
+        try {
+            bitmap = loadFixedBitmap(inputUri) ?: return
 
-        // 3. Simpan
-        val format = when (compressionConfig.format) {
-            OutputFormat.PNG -> Bitmap.CompressFormat.PNG
-            OutputFormat.WEBP -> Bitmap.CompressFormat.WEBP
-            else -> Bitmap.CompressFormat.JPEG
+            // 1. Resize
+            val resized = resize(bitmap, resizeConfig)
+            if (resized != bitmap) { bitmap.recycle(); bitmap = resized }
+
+            // 2. Watermark (Kirim fileName ke sini)
+            val watermarked = applyWatermark(bitmap, fileName,partName, watermarkConfig)
+            if (watermarked != bitmap) { bitmap.recycle(); bitmap = watermarked }
+
+            // 3. Simpan
+            val format = when (compressionConfig.format) {
+                OutputFormat.PNG -> Bitmap.CompressFormat.PNG
+                OutputFormat.WEBP -> Bitmap.CompressFormat.WEBP
+                else -> Bitmap.CompressFormat.JPEG
+            }
+
+            bitmap.compress(format, compressionConfig.quality, outputStream)
+        } catch (e: Exception) {
+            Timber.e(e, "Gagal memproses bitmap")
+            throw e
+        } finally {
+            bitmap?.recycle()
         }
-        bitmap.compress(format, compressionConfig.quality, outputStream)
-        bitmap.recycle()
+    }
+
+    private fun loadFixedBitmap(uri: Uri): Bitmap? {
+        val inputStream = context.contentResolver.openInputStream(uri) ?: return null
+        val original = BitmapFactory.decodeStream(inputStream)
+        inputStream.close()
+        val exifStream = context.contentResolver.openInputStream(uri) ?: return original
+        val exif = ExifInterface(exifStream)
+        val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+        exifStream.close()
+        val matrix = Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+            else -> return original
+        }
+        val rotated = Bitmap.createBitmap(original, 0, 0, original.width, original.height, matrix, true)
+        original.recycle()
+        return rotated
     }
 
     private fun resize(bitmap: Bitmap, config: ResizeConfig): Bitmap {
-        val width = bitmap.width
-        val height = bitmap.height
-        val factor = if (config.mode == ResizeMode.PERCENTAGE) config.percentage / 100f else 1f
-        val newWidth = (width * factor).toInt()
-        val newHeight = (height * factor).toInt()
-
-        return Bitmap.createScaledBitmap(bitmap, maxOf(1, newWidth), maxOf(1, newHeight), true)
+        val factor = config.percentage / 100f
+        if (factor >= 1f) return bitmap
+        return Bitmap.createScaledBitmap(bitmap, (bitmap.width * factor).toInt(), (bitmap.height * factor).toInt(), true)
     }
+    private fun applyTextWatermark(
+        bitmap: Bitmap,
+        fileName: String,
+        config: WatermarkConfig
+    ): Bitmap {
 
-    private fun applyWatermark(bitmap: Bitmap, config: WatermarkConfig): Bitmap {
+        val fullText = buildString {
+            append(config.text)
+
+            if (config.showFilename) {
+                append("\n")
+                append(fileName.substringBeforeLast('.'))
+            }
+        }
 
         val result = bitmap.copy(Bitmap.Config.ARGB_8888, true)
         val canvas = Canvas(result)
+
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             alpha = (config.opacity * 255).toInt()
+            typeface = Typeface.DEFAULT_BOLD
             color = Color.WHITE
-            textSize = bitmap.width * config.size * 0.5f
+            textSize = bitmap.width * config.size * 0.4f
+
+            setShadowLayer(
+                8f,
+                2f,
+                2f,
+                Color.BLACK
+            )
         }
 
-        // Gambar teks di posisi kanan bawah (default)
-        canvas.drawText(config.text, bitmap.width * 0.1f, bitmap.height * 0.9f, paint)
+        val lines = fullText.split("\n")
+
+        var y = bitmap.height * 0.95f
+
+        for (i in lines.indices.reversed()) {
+            canvas.drawText(
+                lines[i],
+                bitmap.width * 0.05f,
+                y,
+                paint
+            )
+            y -= paint.textSize + 10f
+        }
+
         return result
+    }
+    private fun applyImageWatermark(
+        bitmap: Bitmap,
+        fileName: String,
+        partName: String,
+        config: WatermarkConfig
+    ): Bitmap {
+
+        val uri = config.imageUri ?: return bitmap
+
+        val input = context.contentResolver.openInputStream(uri)
+            ?: return bitmap
+
+        val logo = BitmapFactory.decodeStream(input)
+        input.close()
+
+        if (logo == null) {
+            return bitmap
+        }
+
+        val drawer = WatermarkDrawer()
+
+        val result = drawer.draw(
+            bitmap = bitmap,
+            watermark = logo,
+            alpha = config.opacity,
+            scale = config.size,
+            position = config.position.name,
+
+            showFilename = config.showFilename,
+            showPart = true,
+
+            fileName = fileName,
+            partName = partName,
+
+            textSize = config.textSize,
+            textGap = config.textGap,
+            textPosition = config.textPosition
+        )
+        logo.recycle()
+
+        return result
+    }
+
+    private fun applyWatermark(
+        bitmap: Bitmap,
+        fileName: String,
+        partName: String,
+        config: WatermarkConfig
+    ): Bitmap {
+
+        return when (config.type) {
+
+            WatermarkType.TEXT ->
+                applyTextWatermark(
+                    bitmap,
+                    fileName,
+                    config
+                )
+
+            WatermarkType.IMAGE ->
+                applyImageWatermark(
+                    bitmap,
+                    fileName,
+                    partName,
+                    config,
+
+                )
+        }
     }
 }

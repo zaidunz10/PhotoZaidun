@@ -15,7 +15,15 @@ data class WatermarkConfig(
     val size: Float = 0.2f, // 20% dari lebar foto
     val position: WatermarkPosition = WatermarkPosition.BOTTOM_RIGHT,
     val marginX: Float = 0.05f,
-    val marginY: Float = 0.05f
+    val marginY: Float = 0.05f,
+    val showFilename: Boolean = true,
+    val showPart: Boolean = true,
+
+    val textSize: Float = 0.045f,
+
+    val textPosition: TextPosition = TextPosition.BELOW_LOGO,
+
+    val textGap: Float = 12f
 )
 
 data class ResizeConfig(

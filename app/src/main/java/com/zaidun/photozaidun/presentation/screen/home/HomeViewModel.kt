@@ -16,11 +16,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import android.content.Intent
 import android.content.IntentSender
+import androidx.work.WorkInfo
 import com.zaidun.photozaidun.data.auth.GoogleAuthManager
 import com.zaidun.photozaidun.domain.model.PhotoItem
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.update
 import timber.log.Timber
+import java.util.UUID
 import javax.inject.Inject
 data class DriveAuthResult(
     val accessToken: String
@@ -28,34 +30,58 @@ data class DriveAuthResult(
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val workManager: WorkManager,
+
     private val preferences: UserPreferencesDataStore,
     private val googleAuthManager: GoogleAuthManager,
 
 
 
-) : ViewModel() {
+    ) : ViewModel() {
 
-
+    private var currentWorkId: UUID? = null
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
-    init {
-        observeUploadProgress()
-    }
+    private fun observeCurrentWorker() {
 
-    private fun observeUploadProgress() {
-        viewModelScope.launch {
-            workManager.getWorkInfosByTagFlow("UPLOAD_DRIVE").collect { workInfos ->
-                val activeWork = workInfos.filter { !it.state.isFinished }
-                val finishedWork = workInfos.filter { it.state == androidx.work.WorkInfo.State.SUCCEEDED }
+        val id = currentWorkId ?: return
 
-                _uiState.update { state ->
-                    state.copy(
-                        isProcessing = activeWork.isNotEmpty(),
-                        processedImages = finishedWork.size // Ini contoh sederhana
+        workManager
+            .getWorkInfoByIdLiveData(id)
+            .observeForever { work ->
+        Timber.d("OBSERVER MASUK")
+
+                if (work == null) return@observeForever
+
+                val progress = work.progress
+
+                Timber.d("STATE = ${work.state}")
+
+                _uiState.update {
+
+                    it.copy(
+
+                        isProcessing =
+                            work.state == WorkInfo.State.ENQUEUED ||
+                                    work.state == WorkInfo.State.RUNNING,
+
+                        progress =
+                            progress.getInt("progress", 0).toFloat(),
+
+                        current =
+                            progress.getInt("current", 0),
+
+                        total =
+                            progress.getInt("total", 0),
+
+                        currentFilename =
+                            progress.getString("filename") ?: ""
+
                     )
+
                 }
+
             }
-        }
+
     }
     fun requestDrivePermission(
         activity: Activity,
@@ -102,19 +128,44 @@ class HomeViewModel @Inject constructor(
             Timber.d("TOKEN BERHASIL DISIMPAN")
         }
     }
+    fun cancelExport() {
+
+        workManager.cancelAllWorkByTag("EXPORT")
+
+    }
 
     fun onEvent(event: HomeEvent) {
         when (event) {
             HomeEvent.StartProcess -> {
+                Timber.tag("EXPORT").d("START PROCESS DIPANGGIL")
+                _uiState.update {
+                    it.copy(
+                        isProcessing = true,
+                        progress = 0f,
+                        current = 0,
+                        total = 0,
+                        currentFilename = ""
+                    )
+                }
+
                 val inputUri = _uiState.value.selectedFolder
+
                 if (inputUri.isNotEmpty()) {
-                    // Membuat request untuk BatchProcessWorker
+
                     val request = OneTimeWorkRequestBuilder<BatchProcessWorker>()
-                        .setInputData(workDataOf("input_folder" to inputUri))
+                        .setInputData(
+                            workDataOf(
+                                "input_folder" to inputUri
+                            )
+                        )
                         .build()
 
-                    // Menjalankan proses di background
+                    currentWorkId = request.id
+
+                    observeCurrentWorker()
+
                     workManager.enqueue(request)
+                    Timber.tag("EXPORT").d("ENQUEUE = ${request.id}")
                 }
             }
 
