@@ -1,5 +1,10 @@
 package com.zaidun.photozaidun.presentation.screen.home
 
+import android.app.Activity
+import androidx.activity.compose.LocalActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
@@ -20,8 +25,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.workDataOf
+import com.zaidun.photozaidun.worker.DriveUploadWorker
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.lazy.grid.items // PENTING: Untuk looping list foto
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -29,11 +39,16 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale    // PENTING: Untuk ContentScale.Crop
 import coil3.compose.AsyncImage                 // Untuk menampilkan gambar
 import com.zaidun.photozaidun.presentation.navigation.Screen
+import androidx.work.WorkInfo
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.time.delay
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import com.zaidun.photozaidun.worker.DriveUploadWorker.Companion.KEY_ACCESS_TOKEN
+import com.zaidun.photozaidun.worker.DriveUploadWorker.Companion.KEY_FOLDER_URI
+import timber.log.Timber
 import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,6 +63,29 @@ fun HomeScreen(
     onNavigateToWatermark: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val activity = LocalActivity.current
+
+    val launcher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.StartIntentSenderForResult()
+        ) { result ->
+
+            if (result.resultCode == Activity.RESULT_OK) {
+                activity?.let { activity ->
+
+                    viewModel.refreshTokenForUpload(activity) { token ->
+
+                        viewModel.prepareExport(token)
+
+                        onNavigateToExportLoading()
+
+                    }
+
+                }
+            }
+
+        }
+
     val photos by sharedFolderViewModel.photos.collectAsState()
     val coroutineScope = rememberCoroutineScope()
     var pressed by remember {
@@ -206,11 +244,17 @@ fun HomeScreen(
             ) {
                 Button(
                     onClick = {
+                        activity?.let { activity ->
 
-                        viewModel.startBatchProcess()
+                            viewModel.refreshTokenForUpload(activity) { token ->
 
-                        onNavigateToExportLoading()
+                                viewModel.prepareExport(token)
 
+                                onNavigateToExportLoading()
+
+                            }
+
+                        }
                     },
                     modifier = Modifier
                         .fillMaxWidth()

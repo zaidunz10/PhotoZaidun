@@ -15,15 +15,23 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import android.content.Intent
-import android.content.IntentSender
+import com.zaidun.photozaidun.data.file.ExportFolderRepository
+import androidx.documentfile.provider.DocumentFile
 import androidx.work.WorkInfo
 import com.zaidun.photozaidun.data.auth.GoogleAuthManager
 import com.zaidun.photozaidun.domain.model.PhotoItem
+import com.zaidun.photozaidun.worker.DriveUploadWorker.Companion.KEY_ACCESS_TOKEN
+import com.zaidun.photozaidun.worker.KEY_OUTPUT_FOLDER
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.update
 import timber.log.Timber
 import java.util.UUID
 import javax.inject.Inject
+
+
+
+
 data class DriveAuthResult(
     val accessToken: String
 )
@@ -33,15 +41,16 @@ class HomeViewModel @Inject constructor(
 
     private val preferences: UserPreferencesDataStore,
     private val googleAuthManager: GoogleAuthManager,
+    private val exportFolderRepository: ExportFolderRepository
 
 
 
     ) : ViewModel() {
-
     private var currentWorkId: UUID? = null
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
     private fun observeCurrentWorker() {
+
 
         val id = currentWorkId ?: return
 
@@ -56,13 +65,29 @@ class HomeViewModel @Inject constructor(
 
                 Timber.d("STATE = ${work.state}")
 
+                if (work.state == WorkInfo.State.SUCCEEDED) {
+
+                    val outputFolder =
+                        work.outputData.getString(KEY_OUTPUT_FOLDER)
+                            ?: return@observeForever
+
+                    viewModelScope.launch {
+
+                        val prefix = preferences.partFolder.first()
+
+
+                    }
+
+                }
                 _uiState.update {
 
                     it.copy(
 
                         isProcessing =
                             work.state == WorkInfo.State.ENQUEUED ||
+
                                     work.state == WorkInfo.State.RUNNING,
+
 
                         progress =
                             progress.getInt("progress", 0).toFloat(),
@@ -83,35 +108,7 @@ class HomeViewModel @Inject constructor(
             }
 
     }
-    fun requestDrivePermission(
-        activity: Activity,
-        onNeedUserConsent: (IntentSender) -> Unit,
-        onError: (Exception) -> Unit
-    ) {
 
-        googleAuthManager.requestDriveAccess(
-
-            activity,
-
-            onTokenReady = { token ->
-
-                viewModelScope.launch {
-
-                    preferences.saveDriveAccessToken(token)
-
-                    onEvent(HomeEvent.StartProcess)
-
-                }
-
-            },
-
-            onNeedConsent = onNeedUserConsent,
-
-            onError = onError
-
-        )
-
-    }
     fun onAccessTokenReceived(token: String?) {
 
         if (token.isNullOrBlank()) {
@@ -131,6 +128,18 @@ class HomeViewModel @Inject constructor(
     fun cancelExport() {
 
         workManager.cancelAllWorkByTag("EXPORT")
+        workManager.cancelAllWorkByTag("UPLOAD")
+
+    }
+
+    fun clearDriveConsent() {
+
+        _uiState.update {
+
+            it.copy(
+            )
+
+        }
 
     }
 
@@ -153,6 +162,7 @@ class HomeViewModel @Inject constructor(
                 if (inputUri.isNotEmpty()) {
 
                     val request = OneTimeWorkRequestBuilder<BatchProcessWorker>()
+                        .addTag("EXPORT")
                         .setInputData(
                             workDataOf(
                                 "input_folder" to inputUri
@@ -222,7 +232,46 @@ class HomeViewModel @Inject constructor(
         }
 
     }
+    fun prepareExport(
+        accessToken: String
+    ) {
+        startBatchProcess(accessToken)
+    }
+    fun refreshTokenForUpload(
+        activity: Activity,
+        onTokenReady: (String) -> Unit
+    ) {
 
+        googleAuthManager.refreshDriveAccessToken(
+
+            activity = activity,
+
+            onTokenReady = { token ->
+
+                onTokenReady(token)
+
+            },
+
+            onNeedConsent = { sender ->
+
+                _uiState.update {
+
+                    it.copy(
+                    )
+
+                }
+
+            },
+
+            onError = {
+
+                Timber.e("Refresh token gagal")
+
+            }
+
+        )
+
+    }
     fun openGoogleDrive(context: Context) {
         val intent = Intent(Intent.ACTION_VIEW).apply {
             data = Uri.parse("https://drive.google.com")
@@ -236,7 +285,33 @@ class HomeViewModel @Inject constructor(
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://drive.google.com")))
         }
     }
-    fun startBatchProcess() {
-        onEvent(HomeEvent.StartProcess)
+    fun startBatchProcess(accessToken: String) {
+
+        _uiState.update {
+            it.copy(
+                isProcessing = true,
+                progress = 0f,
+                current = 0,
+                total = 0,
+                currentFilename = ""
+            )
+        }
+
+        val inputUri = _uiState.value.selectedFolder
+        if (inputUri.isEmpty()) return
+
+        val request = OneTimeWorkRequestBuilder<BatchProcessWorker>()
+            .addTag("EXPORT")
+            .setInputData(
+                workDataOf(
+                    "input_folder" to inputUri,
+                    KEY_ACCESS_TOKEN to accessToken
+                )
+            )
+            .build()
+
+        currentWorkId = request.id
+        observeCurrentWorker()
+        workManager.enqueue(request)
     }
 }

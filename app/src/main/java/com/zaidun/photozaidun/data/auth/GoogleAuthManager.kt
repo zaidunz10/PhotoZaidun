@@ -96,6 +96,45 @@ class GoogleAuthManager@Inject constructor(@ApplicationContext private val conte
         }
         return null
     }
+    fun refreshDriveAccessToken(
+        activity: Activity,
+        onTokenReady: (String) -> Unit,
+        onNeedConsent: (IntentSender) -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        val request = AuthorizationRequest.builder()
+            .setRequestedScopes(
+                listOf(
+                    Scope("https://www.googleapis.com/auth/drive")
+                )
+            )
+            .build()
+
+        Identity.getAuthorizationClient(activity)
+            .authorize(request)
+            .addOnSuccessListener { result ->
+
+                if (result.hasResolution()) {
+
+                    result.pendingIntent?.let {
+                        onNeedConsent(it.intentSender)
+                    }
+
+                } else {
+
+                    val token = result.accessToken
+
+                    if (!token.isNullOrBlank()) {
+                        Timber.d("Access Token baru berhasil diperoleh")
+                        onTokenReady(token)
+                    } else {
+                        onError(Exception("Access Token kosong"))
+                    }
+                }
+
+            }
+            .addOnFailureListener(onError)
+    }
     fun requestDriveAccess(
         activity: Activity,
         onTokenReady: (String) -> Unit,
@@ -135,49 +174,5 @@ class GoogleAuthManager@Inject constructor(@ApplicationContext private val conte
 
             }
             .addOnFailureListener(onError)
-    }
-    fun requestDrivePermission(
-        activity: Activity,
-        onSuccess: () -> Unit,
-        onNeedUserConsent: (IntentSender) -> Unit,
-        onError: (Exception) -> Unit
-    ) {
-
-        val authorizationRequest = AuthorizationRequest.builder()
-            .setRequestedScopes(
-                listOf(
-                    Scope("https://www.googleapis.com/auth/drive")
-                )
-            )
-            .build()
-
-        Identity
-            .getAuthorizationClient(activity)
-            .authorize(authorizationRequest)
-            .addOnSuccessListener { result ->
-
-                if (result.hasResolution()) {
-
-                    result.pendingIntent?.let {
-
-                        onNeedUserConsent(
-                            it.intentSender
-                        )
-
-                    }
-
-                } else {
-
-                    Timber.d("Drive permission sudah tersedia")
-
-                    onSuccess()
-
-                }
-
-            }
-            .addOnFailureListener {
-                onError(it)
-            }
-
     }
 }

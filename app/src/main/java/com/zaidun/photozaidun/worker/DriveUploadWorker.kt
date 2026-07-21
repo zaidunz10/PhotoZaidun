@@ -10,6 +10,7 @@ import androidx.work.ForegroundInfo
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.zaidun.photozaidun.data.drive.DriveServiceFactory
 import com.zaidun.photozaidun.data.drive.GoogleDriveRepository
 import com.zaidun.photozaidun.data.drive.copyToCache
@@ -31,6 +32,8 @@ class DriveUploadWorker @AssistedInject constructor(
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
     companion object {
+        const val KEY_FOLDER_URI = "folder_uri"
+        const val KEY_ACCESS_TOKEN = "access_token"
         private const val CHANNEL_ID = "drive_upload_channel"
         private const val NOTIFICATION_ID = 101
     }
@@ -50,7 +53,9 @@ class DriveUploadWorker @AssistedInject constructor(
         val folderUriStr = inputData.getString("folder_uri") ?: return Result.failure()
         val folderUri = Uri.parse(folderUriStr)
 
-        val token = preferences.driveAccessToken.first()
+        val token =
+            inputData.getString(KEY_ACCESS_TOKEN)
+                ?: return Result.failure()
         Timber.d("Drive Token = ${token.take(20)}...")
         if (token.isBlank()) {
 
@@ -99,12 +104,60 @@ class DriveUploadWorker @AssistedInject constructor(
                     tempFile.delete()
                 }
             }
+            showFinalNotification(
+                true,
+                "$totalFiles foto selesai di upload"
+            )
 
-            showFinalNotification(true, "$totalFiles foto selesai di upload")
             Result.success()
-        } catch (e: Exception) {
-            showFinalNotification(false, "Terjadi kesalahan: ${e.message}")
-            Result.retry()
+        } catch (e: GoogleJsonResponseException) {
+
+            return when (e.statusCode) {
+
+                401 -> {
+
+                    Timber.e("Access Token expired")
+
+                    Result.retry()
+
+                }
+
+                403 -> {
+
+                    Timber.e("Permission denied")
+
+                    showFinalNotification(
+                        false,
+                        "Google Drive permission denied"
+                    )
+
+                    Result.failure()
+
+                }
+
+                404 -> {
+
+                    Timber.e("Folder tidak ditemukan")
+
+                    showFinalNotification(
+                        false,
+                        "Folder Drive tidak ditemukan"
+                    )
+
+                    Result.failure()
+
+                }
+
+                else -> {
+
+                    Timber.e(e)
+
+                    Result.retry()
+
+                }
+
+            }
+
         }
     }
     private fun createForegroundInfo(progress: String): ForegroundInfo {

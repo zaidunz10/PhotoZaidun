@@ -13,6 +13,8 @@ import com.google.common.collect.Multimaps.index
 import com.zaidun.photozaidun.data.local.datastore.UserPreferencesDataStore
 import com.zaidun.photozaidun.data.processor.bitmap.BitmapProcessor
 import com.zaidun.photozaidun.domain.model.*
+import com.zaidun.photozaidun.worker.DriveUploadWorker.Companion.KEY_ACCESS_TOKEN
+import com.zaidun.photozaidun.worker.DriveUploadWorker.Companion.KEY_FOLDER_URI
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.first
@@ -23,9 +25,44 @@ class BatchProcessWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted params: WorkerParameters,
     private val preferences: UserPreferencesDataStore
+
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
+        val accessToken =
+            inputData.getString(KEY_ACCESS_TOKEN)
+                ?: return Result.failure()
+       fun enqueueUpload(
+            folder: DocumentFile,
+            accessToken: String
+        ) {
+
+        val request =
+            OneTimeWorkRequestBuilder<DriveUploadWorker>()
+                .addTag("UPLOAD")
+                .setInputData(
+
+                    workDataOf(
+
+                        KEY_FOLDER_URI to folder.uri.toString(),
+
+                        KEY_ACCESS_TOKEN to accessToken
+
+                    )
+
+                )
+                .build()
+
+        WorkManager
+            .getInstance(applicationContext)
+            .enqueue(request)
+
+        Timber.tag("UPLOAD")
+            .d("UPLOAD ENQUEUE = ${folder.name}")
+
+    }
+
+
         Timber.tag("EXPORT").d("BATCH WORKER START")
         val inputFolderUriStr = inputData.getString("input_folder") ?: return Result.failure()
         val inputFolder = DocumentFile.fromTreeUri(applicationContext, Uri.parse(inputFolderUriStr)) ?: return Result.failure()
@@ -66,6 +103,10 @@ class BatchProcessWorker @AssistedInject constructor(
             ?: outputBaseFolder.createDirectory("${partPrefix}$currentPart")
 
         imageFiles.forEachIndexed { index, file ->
+            if (isStopped) {
+                Timber.tag("EXPORT").d("Worker dibatalkan")
+                return Result.success()
+            }
             val originalName = file.name ?: "image.jpg"
 
             val dotIndex = originalName.lastIndexOf('.')
@@ -88,15 +129,21 @@ class BatchProcessWorker @AssistedInject constructor(
             }
             try {
                 if (photoCount >= maxPhotos) {
-                    if (preferences.autoUpload.first()) {
-                        triggerDriveUpload(currentOutputFolder?.uri, mainFolderName)
+
+                    currentOutputFolder?.let {
+
+                        enqueueUpload(
+    it,
+    accessToken
+)
+
                     }
 
                     currentPart++
 
-                    // GANTI LAGI: Gunakan findFile agar jika folder "Part X" sudah ada, tidak jadi null
-                    currentOutputFolder = outputBaseFolder.findFile("${partPrefix}$currentPart")
-                        ?: outputBaseFolder.createDirectory("${partPrefix}$currentPart")
+                    currentOutputFolder =
+                        outputBaseFolder.findFile("${partPrefix}$currentPart")
+                            ?: outputBaseFolder.createDirectory("${partPrefix}$currentPart")
 
                     photoCount = 0
                 }
@@ -105,9 +152,7 @@ class BatchProcessWorker @AssistedInject constructor(
                     newName
                 )
                 outputFile?.uri?.let { outUri ->
-                    if (isStopped) {
-                        return Result.failure()
-                    }
+
                     applicationContext.contentResolver.openOutputStream(outUri)?.use { outStream ->
                         val watermarkConfig = if (wmUri.isNotBlank()) {
                             WatermarkConfig(
@@ -140,6 +185,10 @@ class BatchProcessWorker @AssistedInject constructor(
                             compressionConfig = CompressionConfig(quality = quality),
                             outputStream = outStream
                         )
+                        if (isStopped) {
+                            Timber.d("Worker dibatalkan setelah proses bitmap")
+                            return Result.success()
+                        }
                         setProgress(
                             workDataOf(
                                 "progress" to ((index + 1) * 100 / imageFiles.size),
@@ -156,22 +205,20 @@ class BatchProcessWorker @AssistedInject constructor(
             }
         }
 
-        // Upload Part Terakhir
-        if (preferences.autoUpload.first()) {
-            triggerDriveUpload(currentOutputFolder?.uri, mainFolderName)
+        currentOutputFolder?.let {
+
+            enqueueUpload(
+    it,
+    accessToken
+)
+
         }
-
-        return Result.success()
+        return Result.success(
+            workDataOf(
+                KEY_OUTPUT_FOLDER to outputBaseFolder.uri.toString()
+            )
+        )
     }
 
-    private fun triggerDriveUpload(folderUri: Uri?, driveParentFolder: String) {
-        if (folderUri == null) return
-        val uploadRequest = OneTimeWorkRequestBuilder<DriveUploadWorker>()
-            .setInputData(workDataOf(
-                "folder_uri" to folderUri.toString(),
-                "drive_folder_name" to driveParentFolder
-            ))
-            .build()
-        WorkManager.getInstance(applicationContext).enqueue(uploadRequest)
-    }
+
 }

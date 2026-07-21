@@ -1,5 +1,4 @@
 package com.zaidun.photozaidun.presentation.screen.home
-
 import com.zaidun.photozaidun.domain.model.PhotoItem
 
 data class HomeUiState(
@@ -11,7 +10,6 @@ data class HomeUiState(
     val totalSelected: Int = 0,
 
     val isProcessing: Boolean = false,
-
     val progress: Float = 0f,
 
     val previewPhoto: PhotoItem? = null,
