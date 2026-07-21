@@ -50,18 +50,20 @@ class BatchProcessWorker @AssistedInject constructor(
 
 
 
-        // 2. Siapkan Folder Output Utama di HP (Lokal)
-        // Kita buat folder hasil di dalam folder input agar mudah ditemukan
-        val outputBaseFolder = inputFolder.createDirectory(mainFolderName) ?: inputFolder
+        val outputBaseFolder = if (mainFolderName.isBlank()) inputFolder else {
+            inputFolder.findFile(mainFolderName) ?: inputFolder.createDirectory(mainFolderName) ?: inputFolder
+        }
 
         val processor = BitmapProcessor(applicationContext)
-        val imageFiles = inputFolder.listFiles().filter {
-            it.type?.startsWith("image/") == true
-        }
+
+        val imageFiles = inputFolder.listFiles()
+            .filter { it.type?.startsWith("image/") == true }
+            .sortedBy { it.name?.lowercase() }
 
         var photoCount = 0
         var currentPart = 1
-        var currentOutputFolder = outputBaseFolder.createDirectory("${partPrefix}$currentPart")
+        var currentOutputFolder = outputBaseFolder.findFile("${partPrefix}$currentPart")
+            ?: outputBaseFolder.createDirectory("${partPrefix}$currentPart")
 
         imageFiles.forEachIndexed { index, file ->
             val originalName = file.name ?: "image.jpg"
@@ -85,15 +87,17 @@ class BatchProcessWorker @AssistedInject constructor(
                 }
             }
             try {
-                // Logic Splitting Folder V2
                 if (photoCount >= maxPhotos) {
-                    // Trigger Upload Folder Part yang sudah penuh ke Drive jika Auto Upload aktif
                     if (preferences.autoUpload.first()) {
                         triggerDriveUpload(currentOutputFolder?.uri, mainFolderName)
                     }
 
                     currentPart++
-                    currentOutputFolder = outputBaseFolder.createDirectory("${partPrefix}$currentPart")
+
+                    // GANTI LAGI: Gunakan findFile agar jika folder "Part X" sudah ada, tidak jadi null
+                    currentOutputFolder = outputBaseFolder.findFile("${partPrefix}$currentPart")
+                        ?: outputBaseFolder.createDirectory("${partPrefix}$currentPart")
+
                     photoCount = 0
                 }
                 val outputFile = currentOutputFolder?.createFile(
