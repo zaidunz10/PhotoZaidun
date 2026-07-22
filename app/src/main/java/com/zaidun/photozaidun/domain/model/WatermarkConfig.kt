@@ -25,7 +25,9 @@ data class WatermarkConfig(
     val logoOffsetY: Float = 0.02f,
     val infoOffsetX: Float = 0.02f,
     val infoOffsetY: Float = 0.05f,
-    val infoSize: Float = 0.04f
+    val infoSize: Float = 0.04f,
+    val showDate: Boolean = true,
+    val showTime: Boolean = true
 )
 
 data class ResizeConfig(

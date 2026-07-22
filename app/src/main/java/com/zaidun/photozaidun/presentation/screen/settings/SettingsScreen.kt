@@ -33,7 +33,6 @@ import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Numbers
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -51,26 +50,27 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlin.math.PI
 import kotlin.math.sin
 
-// --- Palet warna tema ungu, konsisten dengan HomeScreen ---
-private val DeepPurple = Color(0xFF3B1F63)
-private val AccentPurple = Color(0xFF7B4FE0)
-private val ScreenBg = Color(0xFFF7F4FC)
-private val TitleDark = Color(0xFF2A1A44)
-private val SubtleGray = Color(0xFF6B6079)
-private val LabelGray = Color(0xFF8A7F98)
-private val ConnectedGreen = Color(0xFF3FBF6F)
-
+// --- Palet Warna disesuaikan persis dengan gambar ---
+private val ScreenBg = Color(0xFFF4F5F9)
+private val CardBg = Color(0xFFFFFFFF)
+private val PurpleAccent = Color(0xFF7C3AED) // Ungu persis seperti gambar
+private val TextDark = Color(0xFF1E1E24)
+private val TextGray = Color(0xFF8A8A8E)
+private val ConnectedGreenText = Color(0xFF137333)
+private val ConnectedGreenBg = Color(0xFFE6F4EA)
+private val DividerColor = Color(0xFFF0F0F0)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,27 +80,22 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
-    val consentLauncher =
-        rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.StartIntentSenderForResult()
-        ) { result ->
-            if (result.resultCode == Activity.RESULT_OK) {
-                viewModel.loginGoogle(
-                    activity = context as Activity,
-                    onNeedConsent = { },
-                    onError = { }
-                )
-            }
+    val consentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            viewModel.loginGoogle(activity = context as Activity, onNeedConsent = { }, onError = { })
         }
+    }
 
     Scaffold(
         containerColor = ScreenBg,
         topBar = {
             TopAppBar(
-                title = { Text("Animated Export Settings", fontWeight = FontWeight.Bold, color = TitleDark) },
+                title = { Text("Animated Export Settings", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = TextDark) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = TitleDark)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = TextDark)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = ScreenBg)
@@ -111,13 +106,12 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(20.dp),
-            verticalArrangement = Arrangement.spacedBy(22.dp)
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 1. Koneksi Cloud
+            // ================= 1. KONEKSI CLOUD =================
             item {
                 SectionLabel("Koneksi Cloud")
-                Spacer(Modifier.height(12.dp))
 
                 if (uiState.googleUser == null) {
                     Button(
@@ -125,15 +119,13 @@ fun SettingsScreen(
                             viewModel.loginGoogle(
                                 activity = context as Activity,
                                 onNeedConsent = { sender ->
-                                    consentLauncher.launch(
-                                        IntentSenderRequest.Builder(sender).build()
-                                    )
+                                    consentLauncher.launch(IntentSenderRequest.Builder(sender).build())
                                 },
                                 onError = { it.printStackTrace() }
                             )
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4285F4))
                     ) {
                         Icon(Icons.Default.CloudUpload, null)
@@ -143,260 +135,222 @@ fun SettingsScreen(
                 } else {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = CardBg),
+                        elevation = CardDefaults.cardElevation(0.dp)
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(androidx.compose.foundation.shape.CircleShape)
-                                    .background(AccentPurple.copy(alpha = 0.15f)),
-                                contentAlignment = Alignment.Center
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            // User Info Row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                val initial = uiState.googleUser?.name?.trim()?.firstOrNull()?.uppercase() ?: "?"
-                                Text(initial, fontWeight = FontWeight.Bold, color = DeepPurple)
+                                // Avatar
+                                Box(
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .clip(CircleShape)
+                                        .background(PurpleAccent.copy(alpha = 0.2f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    val initial = uiState.googleUser?.name?.trim()?.firstOrNull()?.uppercase() ?: "?"
+                                    Text(initial, fontWeight = FontWeight.Bold, color = PurpleAccent)
+                                }
+
+                                Spacer(Modifier.width(12.dp))
+
+                                // Name & Email
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(uiState.googleUser?.name ?: "User", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextDark)
+                                    Text(uiState.googleUser?.email ?: "", fontSize = 12.sp, color = TextGray)
+                                }
+
+                                // Connected Pill
+                                Box(
+                                    modifier = Modifier
+                                        .background(ConnectedGreenBg, RoundedCornerShape(16.dp))
+                                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Text("Connected", color = ConnectedGreenText, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                }
+
+                                Spacer(Modifier.width(12.dp))
+
+                                // Logout Button
+                                Box(modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFFF3F4F6))
+                                    .clickable { viewModel.logoutGoogle(context as Activity) }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Text("Logout", color = Color.DarkGray, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                }
                             }
 
-                            Spacer(Modifier.width(10.dp))
+                            Spacer(Modifier.height(16.dp))
 
-                            Column(modifier = Modifier.weight(1f)) {
+                            // Status Indicator
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(if (uiState.driveConnected) Color(0xFF34C759) else Color.Gray)
+                                )
+                                Spacer(Modifier.width(8.dp))
                                 Text(
-                                    uiState.googleUser?.name ?: "User",
-                                    fontWeight = FontWeight.Bold,
+                                    if (uiState.driveConnected) "Terhubung dengan Drive" else "Belum terhubung",
                                     fontSize = 13.sp,
-                                    color = TitleDark
+                                    color = TextDark,
+                                    fontWeight = FontWeight.Medium
                                 )
-                                Text(
-                                    uiState.googleUser?.email ?: "",
-                                    fontSize = 11.sp,
-                                    color = LabelGray
-                                )
-                            }
-
-                            Surface(
-                                color = ConnectedGreen.copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(50)
-                            ) {
-                                Text(
-                                    "Connected",
-                                    color = ConnectedGreen,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                )
-                            }
-
-                            Spacer(Modifier.width(6.dp))
-
-                            TextButton(onClick = { viewModel.logoutGoogle(context as Activity) }) {
-                                Text("Logout", color = Color.Gray, fontSize = 12.sp)
                             }
                         }
-                    }
-
-                    Spacer(Modifier.height(10.dp))
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(androidx.compose.foundation.shape.CircleShape)
-                                .background(if (uiState.driveConnected) ConnectedGreen else Color.Gray)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            if (uiState.driveConnected) "Terhubung dengan Drive" else "Belum terhubung dengan Drive",
-                            fontSize = 12.sp,
-                            color = SubtleGray
-                        )
                     }
                 }
             }
 
-            // Upload Otomatis
+            // ================= 2. UPLOAD OTOMATIS =================
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Upload Otomatis ke Google Drive",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                color = TitleDark
-                            )
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                "Setelah export selesai, folder akan langsung diupload ke Google Drive.",
-                                fontSize = 11.sp,
-                                color = LabelGray
-                            )
-                        }
-                        Switch(
-                            checked = uiState.autoUpload,
-                            onCheckedChange = { viewModel.saveAutoUpload(it) },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = AccentPurple
-                            )
+                    Text(
+                        "Upload Otomatis ke Google Drive",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = TextDark
+                    )
+                    Switch(
+                        checked = uiState.autoUpload,
+                        onCheckedChange = { viewModel.saveAutoUpload(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = PurpleAccent,
+                            uncheckedThumbColor = Color.White,
+                            uncheckedTrackColor = Color.LightGray,
+                            uncheckedBorderColor = Color.Transparent
                         )
-                    }
+                    )
                 }
             }
 
-            // 2. Struktur Folder & Penamaan — accordion style
+            // ================= 3. STRUKTUR FOLDER & PENAMAAN =================
             item {
                 SectionLabel("Struktur Folder & Penamaan")
-                Spacer(Modifier.height(12.dp))
-            }
 
-            item {
-                ExpandableFolderField(
-                    icon = Icons.Default.Folder,
-                    label = "Induk Folder (Level 1)",
-                    value = uiState.rootFolder,
-                    onValueChange = { viewModel.saveRootFolder(it) },
-                    fieldLabel = "Nama Induk Folder",
-                    initiallyExpanded = true
-                )
-            }
-
-            item {
-                Spacer(Modifier.height(10.dp))
-                ExpandableFolderField(
-                    icon = Icons.Default.CreateNewFolder,
-                    label = "Folder Project (Level 2)",
-                    value = uiState.mainFolder,
-                    onValueChange = { viewModel.saveMainFolder(it) },
-                    fieldLabel = "Nama Folder Project"
-                )
-            }
-
-            item {
-                Spacer(Modifier.height(10.dp))
-                ExpandableFolderField(
-                    icon = Icons.Default.Numbers,
-                    label = "Prefix Nama Part (Level 3)",
-                    value = uiState.partFolder,
-                    onValueChange = { viewModel.savePartFolder(it) },
-                    fieldLabel = "Prefix Nama Part",
-                    placeholder = "Contoh: Part",
-                    supportingText = "Akan menjadi ${uiState.partFolder}1, dst."
-                )
-            }
-
-            item {
-                Spacer(Modifier.height(10.dp))
-                ExpandableFolderField(
-                    icon = Icons.Default.DriveFileRenameOutline,
-                    label = "Nama Tambahan File",
-                    value = uiState.fileSuffix,
-                    onValueChange = { viewModel.saveFileSuffix(it) },
-                    fieldLabel = "Nama Tambahan File",
-                    supportingText = if (uiState.fileSuffix.isBlank())
-                        "Contoh: IMG_01.jpg"
-                    else
-                        "Contoh: IMG_01_${uiState.fileSuffix}.jpg"
-                )
-            }
-
-            // 3. Limit & Kualitas
-            item {
-                Spacer(Modifier.height(6.dp))
-                SectionLabel("Limit & Kualitas")
-                Spacer(Modifier.height(12.dp))
-
-                OutlinedTextField(
-                    value = uiState.maxPhotoPerFolder,
-                    onValueChange = {
-                        val value = it.filter(Char::isDigit)
-                        if (value.length <= 5) viewModel.saveMaxPhoto(value)
-                    },
-                    label = { Text("Jumlah Foto per Folder") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    leadingIcon = { Icon(Icons.Default.Numbers, null, tint = AccentPurple) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = AccentPurple,
-                        focusedLabelColor = AccentPurple
-                    )
-                )
-
-                Spacer(Modifier.height(24.dp))
-
-                Text(
-                    "Resolusi Export: ${uiState.resizePercent}%",
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp,
-                    color = TitleDark
-                )
-                Spacer(Modifier.height(10.dp))
-
-                WaveSlider(
-                    value = uiState.resizePercent.toFloatOrNull() ?: 100f,
-                    onValueChange = { viewModel.saveResizePercent(it.toInt().toString()) },
-                    valueRange = 10f..100f
-                )
-            }
-
-            // Preview Section
-            item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = AccentPurple.copy(alpha = 0.08f))
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = CardBg),
+                    elevation = CardDefaults.cardElevation(0.dp)
                 ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(
-                            "Preview Lokasi Cloud:",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = TitleDark
+                    Column {
+                        FolderRow(
+                            icon = Icons.Default.Folder,
+                            label = "Induk Folder (Level 1)",
+                            value = uiState.rootFolder,
+                            fieldLabel = "Nama Induk Folder",
+                            onValueChange = { viewModel.saveRootFolder(it) },
+                            initiallyExpanded = true // Terbuka secara default sesuai gambar
                         )
-                        Spacer(Modifier.height(4.dp))
-                        val previewFile =
-                            if (uiState.fileSuffix.isBlank()) {
-                                "IMG_01.jpg"
-                            } else {
-                                "IMG_01_${uiState.fileSuffix}.jpg"
-                            }
 
-                        Text(
-                            "My Drive / ${uiState.rootFolder} / ${uiState.mainFolder} / ${uiState.partFolder}1 / $previewFile",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = SubtleGray
+                        HorizontalDivider(color = DividerColor, modifier = Modifier.padding(horizontal = 48.dp))
+
+                        FolderRow(
+                            icon = Icons.Default.CreateNewFolder,
+                            label = "Folder Project (Level 2)",
+                            value = uiState.mainFolder,
+                            fieldLabel = "Nama Folder Project",
+                            onValueChange = { viewModel.saveMainFolder(it) }
+                        )
+
+                        HorizontalDivider(color = DividerColor, modifier = Modifier.padding(horizontal = 48.dp))
+
+                        FolderRow(
+                            icon = Icons.Default.Numbers,
+                            label = "Prefix Nama Part (Level 3)",
+                            value = uiState.partFolder,
+                            fieldLabel = "Prefix Nama Part",
+                            onValueChange = { viewModel.savePartFolder(it) }
+                        )
+
+                        HorizontalDivider(color = DividerColor, modifier = Modifier.padding(horizontal = 48.dp))
+
+                        FolderRow(
+                            icon = Icons.Default.DriveFileRenameOutline,
+                            label = "Nama Tambahan File",
+                            value = uiState.fileSuffix,
+                            fieldLabel = "Nama Tambahan File",
+                            onValueChange = { viewModel.saveFileSuffix(it) }
                         )
                     }
                 }
             }
 
+            // ================= 4. LIMIT & KUALITAS =================
             item {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "Copyright by zaidunz_photo",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.LightGray,
+                SectionLabel("Limit & Kualitas")
+
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = CardBg),
+                    elevation = CardDefaults.cardElevation(0.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+
+                        OutlinedTextField(
+                            value = uiState.maxPhotoPerFolder,
+                            onValueChange = {
+                                val value = it.filter(Char::isDigit)
+                                if (value.length <= 5) viewModel.saveMaxPhoto(value)
+                            },
+                            label = { Text("Jumlah Foto per Folder") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = PurpleAccent,
+                                focusedLabelColor = PurpleAccent,
+                                unfocusedBorderColor = Color.LightGray
+                            )
+                        )
+
+                        Spacer(Modifier.height(20.dp))
+
+                        Text(
+                            "Resolusi Export: ${uiState.resizePercent}%",
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 14.sp,
+                            color = TextDark
+                        )
+
+                        Spacer(Modifier.height(8.dp))
+
+                        WaveSlider(
+                            value = uiState.resizePercent.toFloatOrNull() ?: 100f,
+                            onValueChange = { viewModel.saveResizePercent(it.toInt().toString()) },
+                            valueRange = 10f..100f
+                        )
+                    }
+                }
+            }
+
+            // ================= 5. PREVIEW LOKASI =================
+            item {
+                val previewFile = if (uiState.fileSuffix.isBlank()) "IMG_01.jpg" else "IMG_01_${uiState.fileSuffix}.jpg"
+                Text(
+                    text = "Preview Lokasi Cloud: My Drive / ${uiState.rootFolder} / ${uiState.mainFolder} / ${uiState.partFolder}1 / $previewFile",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.DarkGray,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
                 )
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(32.dp)) // Jarak ekstra di bawah
             }
         }
     }
@@ -404,23 +358,25 @@ fun SettingsScreen(
 
 @Composable
 private fun SectionLabel(text: String) {
-    Text(text, fontWeight = FontWeight.Bold, color = DeepPurple, fontSize = 14.sp)
+    Text(
+        text = text,
+        fontWeight = FontWeight.Bold,
+        color = TextDark,
+        fontSize = 15.sp,
+        modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+    )
 }
 
 /**
- * Baris folder yang bisa di-expand/collapse.
- * Collapsed: menampilkan value saat ini di kanan + chevron.
- * Expanded: menampilkan text field untuk mengedit value.
+ * Komponen Baris Folder bergaya Accordion persis seperti di gambar.
  */
 @Composable
-private fun ExpandableFolderField(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+private fun FolderRow(
+    icon: ImageVector,
     label: String,
     value: String,
-    onValueChange: (String) -> Unit,
     fieldLabel: String,
-    placeholder: String? = null,
-    supportingText: String? = null,
+    onValueChange: (String) -> Unit,
     initiallyExpanded: Boolean = false
 ) {
     var expanded by remember { mutableStateOf(initiallyExpanded) }
@@ -430,79 +386,73 @@ private fun ExpandableFolderField(
         label = "chevronRotation"
     )
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { expanded = !expanded }
+            .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = !expanded },
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(icon, null, tint = AccentPurple, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(12.dp))
+
+            Text(
+                text = label,
+                modifier = Modifier.weight(1f),
+                fontSize = 14.sp,
+                color = TextDark,
+                fontWeight = FontWeight.Medium
+            )
+
+            // Tampilkan value di kanan hanya jika collapsed
+            AnimatedVisibility(visible = !expanded, enter = fadeIn(), exit = fadeOut()) {
                 Text(
-                    label,
-                    modifier = Modifier.weight(1f),
-                    fontSize = 13.sp,
-                    color = TitleDark,
-                    fontWeight = FontWeight.Medium
-                )
-
-                AnimatedVisibility(visible = !expanded, enter = fadeIn(), exit = fadeOut()) {
-                    Text(
-                        value.ifBlank { "-" },
-                        fontSize = 12.sp,
-                        color = LabelGray,
-                        modifier = Modifier.padding(end = 6.dp)
-                    )
-                }
-
-                Icon(
-                    Icons.Default.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = LabelGray,
-                    modifier = Modifier.graphicsLayer { rotationZ = chevronRotation }
+                    text = value.ifBlank { "-" },
+                    fontSize = 14.sp,
+                    color = TextDark,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(end = 8.dp)
                 )
             }
 
-            AnimatedVisibility(
-                visible = expanded,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
-            ) {
-                Column(modifier = Modifier.padding(top = 12.dp)) {
-                    OutlinedTextField(
-                        value = value,
-                        onValueChange = onValueChange,
-                        label = { Text(fieldLabel) },
-                        placeholder = placeholder?.let { { Text(it) } },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = AccentPurple,
-                            focusedLabelColor = AccentPurple
-                        )
+            Icon(
+                Icons.Default.KeyboardArrowDown,
+                contentDescription = null,
+                tint = Color.Gray,
+                modifier = Modifier.graphicsLayer { rotationZ = chevronRotation }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = expanded,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
+        ) {
+            Column(modifier = Modifier.padding(top = 16.dp, start = 34.dp)) {
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    label = { Text(fieldLabel) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PurpleAccent,
+                        focusedLabelColor = PurpleAccent,
+                        unfocusedBorderColor = Color.LightGray
                     )
-                    if (supportingText != null) {
-                        Spacer(Modifier.height(6.dp))
-                        Text(supportingText, fontSize = 11.sp, color = LabelGray)
-                    }
-                }
+                )
             }
         }
     }
 }
 
 /**
- * Slider bergaya "liquid wave" ungu — pengganti Slider Material biasa.
- * Bisa di-drag/tap seperti slider normal; gelombangnya landai & mengalir pelan,
- * dengan area di bawah kurva diisi gradient supaya terasa "penuh" bukan sekadar garis.
+ * Slider bergaya "liquid wave". Skema warnanya disesuaikan
+ * agar warnanya ungu solid (`#7C3AED`) persis seperti gambar.
  */
 @Composable
 private fun WaveSlider(
@@ -517,7 +467,7 @@ private fun WaveSlider(
     val phase by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = (2 * PI).toFloat(),
-        animationSpec = infiniteRepeatable(tween(4200, easing = LinearEasing)),
+        animationSpec = infiniteRepeatable(tween(4000, easing = LinearEasing)),
         label = "phase"
     )
 
@@ -531,33 +481,26 @@ private fun WaveSlider(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(64.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(Color(0xFFF1ECFB))
-            .padding(horizontal = 6.dp)
+            .height(56.dp)
+            .pointerInput(valueRange) {
+                detectTapGestures { offset -> updateFromX(offset.x, size.width.toFloat()) }
+            }
+            .pointerInput(valueRange) {
+                detectDragGestures { change, _ ->
+                    change.consume()
+                    updateFromX(change.position.x, size.width.toFloat())
+                }
+            }
     ) {
-        Canvas(
-            modifier = Modifier
-                .fillMaxSize()
-                .pointerInput(valueRange) {
-                    detectTapGestures { offset -> updateFromX(offset.x, size.width.toFloat()) }
-                }
-                .pointerInput(valueRange) {
-                    detectDragGestures { change, _ ->
-                        change.consume()
-                        updateFromX(change.position.x, size.width.toFloat())
-                    }
-                }
-        ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
             val centerY = size.height / 2f
-            val amplitude = size.height * 0.14f          // gelombang landai, tidak norak
-            val waveLength = size.width / 2.2f           // hanya ~2 lekukan penuh, terasa tenang
+            val amplitude = size.height * 0.15f
+            val waveLength = size.width / 2.5f
             val activeWidth = (size.width * fraction).coerceIn(0f, size.width)
             val step = 4f
 
             fun waveY(x: Float) = centerY + amplitude * sin((x / waveLength) + phase)
 
-            // Path kurva gelombang dari 0 sampai activeWidth
             val wavePath = Path().apply {
                 moveTo(0f, waveY(0f))
                 var x = step
@@ -568,7 +511,7 @@ private fun WaveSlider(
                 lineTo(activeWidth, waveY(activeWidth))
             }
 
-            // Area terisi di bawah kurva — kesan "liquid", bukan cuma garis
+            // Area terisi di bawah kurva (Warna Ungu)
             if (activeWidth > 0f) {
                 val fillPath = Path().apply {
                     addPath(wavePath)
@@ -579,32 +522,31 @@ private fun WaveSlider(
                 drawPath(
                     path = fillPath,
                     brush = Brush.verticalGradient(
-                        listOf(AccentPurple.copy(alpha = 0.28f), AccentPurple.copy(alpha = 0.02f))
+                        listOf(PurpleAccent.copy(alpha = 0.6f), PurpleAccent.copy(alpha = 0.1f))
                     )
                 )
                 drawPath(
                     path = wavePath,
-                    brush = Brush.horizontalGradient(listOf(AccentPurple, DeepPurple)),
-                    style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round)
+                    color = PurpleAccent,
+                    style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
                 )
             }
 
-            // sisa track setelah posisi aktif — garis tipis datar, netral
+            // Sisa track abu-abu pucat (Inactive track)
             if (activeWidth < size.width) {
                 drawLine(
-                    color = Color(0xFFD9CFEF),
+                    color = Color(0xFFE5E5EA),
                     start = Offset(activeWidth, centerY),
                     end = Offset(size.width, centerY),
-                    strokeWidth = 3.dp.toPx(),
+                    strokeWidth = 4.dp.toPx(),
                     cap = StrokeCap.Round
                 )
             }
 
-            // thumb dengan ring lembut
+            // Thumb Slider (Lingkaran Putih dengan border ungu)
             val thumbY = waveY(activeWidth)
-            drawCircle(color = DeepPurple.copy(alpha = 0.18f), radius = 14.dp.toPx(), center = Offset(activeWidth, thumbY))
-            drawCircle(color = DeepPurple, radius = 9.dp.toPx(), center = Offset(activeWidth, thumbY))
-            drawCircle(color = Color.White, radius = 3.5.dp.toPx(), center = Offset(activeWidth, thumbY))
+            drawCircle(color = Color.White, radius = 10.dp.toPx(), center = Offset(activeWidth, thumbY))
+            drawCircle(color = PurpleAccent, radius = 10.dp.toPx(), center = Offset(activeWidth, thumbY), style = Stroke(width = 3.dp.toPx()))
         }
     }
 }

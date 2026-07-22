@@ -12,5 +12,7 @@ data class WatermarkSettingsUiState(
     val infoOffsetX: Float = 0.02f,
     val infoOffsetY: Float = 0.05f,
     val infoFontSize: Float = 0.04f,
-    val position: String = "" // Untuk kompatibilitas lama jika perlu
+    val position: String = "",
+    val showDate: Boolean = true,
+    val showTime: Boolean = true,
 )

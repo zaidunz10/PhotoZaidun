@@ -1,6 +1,8 @@
 package com.zaidun.photozaidun.data.local.datastore
 
+import android.R.attr.data
 import android.content.Context
+import androidx.datastore.dataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -54,6 +56,9 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
         private val INFO_OFFSET_X = floatPreferencesKey("info_offset_x")
         private val INFO_OFFSET_Y = floatPreferencesKey("info_offset_y")
         private val INFO_FONT_SIZE = floatPreferencesKey("info_font_size")
+        private val SHOW_DATE = booleanPreferencesKey("show_date")
+
+        private val SHOW_TIME = booleanPreferencesKey("show_time")
 
     }
 
@@ -68,6 +73,26 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
         context.dataStore.data.map { prefs ->
             prefs[DRIVE_ACCESS_TOKEN] ?: ""
         }
+    val showDate: Flow<Boolean> =
+        context.dataStore.data.map {
+            it[SHOW_DATE] ?: true
+        }
+
+    val showTime: Flow<Boolean> =
+        context.dataStore.data.map {
+            it[SHOW_TIME] ?: true
+        }
+    suspend fun saveShowDate(value: Boolean) {
+        context.dataStore.edit {
+            it[SHOW_DATE] = value
+        }
+    }
+
+    suspend fun saveShowTime(value: Boolean) {
+        context.dataStore.edit {
+            it[SHOW_TIME] = value
+        }
+    }
 
     suspend fun saveFolderDisplayName(name: String) {
         context.dataStore.edit {

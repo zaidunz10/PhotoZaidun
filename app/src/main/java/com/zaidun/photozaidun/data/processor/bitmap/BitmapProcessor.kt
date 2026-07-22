@@ -7,7 +7,9 @@ import com.zaidun.photozaidun.data.processor.watermark.WatermarkDrawer
 import com.zaidun.photozaidun.domain.model.*
 import timber.log.Timber
 import java.io.OutputStream
-
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class BitmapProcessor(private val context: Context) {
     fun process(
@@ -30,7 +32,16 @@ class BitmapProcessor(private val context: Context) {
             if (resized != bitmap) { bitmap.recycle(); bitmap = resized }
 
             // 2. Watermark (Kirim fileName ke sini)
-            val watermarked = applyWatermark(bitmap, fileName,partName, watermarkConfig)
+            val photoDateTime = readPhotoDateTime(inputUri)
+
+// 2. Watermark
+            val watermarked = applyWatermark(
+                bitmap,
+                fileName,
+                partName,
+                watermarkConfig,
+                photoDateTime
+            )
             if (watermarked != bitmap) { bitmap.recycle(); bitmap = watermarked }
 
             // 3. Simpan
@@ -48,7 +59,80 @@ class BitmapProcessor(private val context: Context) {
             bitmap?.recycle()
         }
     }
+    private data class PhotoDateTime(
+        val date: String,
+        val time: String
+    )
 
+    private fun readPhotoDateTime(uri: Uri): PhotoDateTime {
+        return try {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+
+                val exif = ExifInterface(input)
+
+                val original =
+                    exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
+                        ?: exif.getAttribute(ExifInterface.TAG_DATETIME)
+
+                if (original != null) {
+
+                    val parser = SimpleDateFormat(
+                        "yyyy:MM:dd HH:mm:ss",
+                        Locale.getDefault()
+                    )
+
+                    val date = parser.parse(original)
+
+                    if (date != null) {
+
+                        val dateText = SimpleDateFormat(
+                            "dd MMMM yyyy",
+                            Locale("id", "ID")
+                        ).format(date)
+
+                        val timeText = SimpleDateFormat(
+                            "HH:mm",
+                            Locale("id", "ID")
+                        ).format(date) + " WIB"
+
+                        return PhotoDateTime(
+                            date = dateText,
+                            time = timeText
+                        )
+                    }
+                }
+            }
+
+            // fallback lama
+            val now = Date()
+
+            PhotoDateTime(
+                date = SimpleDateFormat(
+                    "dd MMMM yyyy",
+                    Locale("id", "ID")
+                ).format(now),
+                time = SimpleDateFormat(
+                    "HH:mm",
+                    Locale("id", "ID")
+                ).format(now) + " WIB"
+            )
+
+        } catch (e: Exception) {
+
+            val now = Date()
+
+            PhotoDateTime(
+                date = SimpleDateFormat(
+                    "dd MMMM yyyy",
+                    Locale("id", "ID")
+                ).format(now),
+                time = SimpleDateFormat(
+                    "HH:mm",
+                    Locale("id", "ID")
+                ).format(now) + " WIB"
+            )
+        }
+    }
     private fun loadFixedBitmap(uri: Uri): Bitmap? {
         val inputStream = context.contentResolver.openInputStream(uri) ?: return null
         val original = BitmapFactory.decodeStream(inputStream)
@@ -126,7 +210,8 @@ class BitmapProcessor(private val context: Context) {
         bitmap: Bitmap,
         fileName: String,
         partName: String,
-        config: WatermarkConfig
+        config: WatermarkConfig,
+        photoDateTime: PhotoDateTime
     ): Bitmap {
 
         val uri = config.imageUri ?: return bitmap
@@ -156,6 +241,8 @@ class BitmapProcessor(private val context: Context) {
 
             fileName = fileName,
             partName = partName,
+            dateText = photoDateTime.date,
+            timeText = photoDateTime.time,
 
             infoOffsetX = config.infoOffsetX,
             infoOffsetY = config.infoOffsetY,
@@ -170,7 +257,8 @@ class BitmapProcessor(private val context: Context) {
         bitmap: Bitmap,
         fileName: String,
         partName: String,
-        config: WatermarkConfig
+        config: WatermarkConfig,
+        photoDateTime: PhotoDateTime
     ): Bitmap {
 
         return when (config.type) {
@@ -188,6 +276,7 @@ class BitmapProcessor(private val context: Context) {
                     fileName,
                     partName,
                     config,
+                    photoDateTime
 
                 )
         }

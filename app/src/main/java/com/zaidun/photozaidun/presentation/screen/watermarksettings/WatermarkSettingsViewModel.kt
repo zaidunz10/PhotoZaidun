@@ -24,11 +24,14 @@ class WatermarkSettingsViewModel @Inject constructor(
         preferences.watermarkScale,
         preferences.showFilename,
         preferences.showPart,
+        preferences.showDate,
+        preferences.showTime,
         preferences.logoOffsetX,
         preferences.logoOffsetY,
         preferences.infoOffsetX,
         preferences.infoOffsetY,
         preferences.infoFontSize
+
     ) { args ->
         WatermarkSettingsUiState(
             watermarkUri = args[0] as String,
@@ -37,11 +40,13 @@ class WatermarkSettingsViewModel @Inject constructor(
             scale = args[3] as Float,
             showFilename = args[4] as Boolean,
             showPart = args[5] as Boolean,
-            logoOffsetX = args[6] as Float,
-            logoOffsetY = args[7] as Float,
-            infoOffsetX = args[8] as Float,
-            infoOffsetY = args[9] as Float,
-            infoFontSize = args[10] as Float
+            showDate = args[6] as Boolean,
+            showTime = args[7] as Boolean,
+            logoOffsetX = args[8] as Float,
+            logoOffsetY = args[9] as Float,
+            infoOffsetX = args[10] as Float,
+            infoOffsetY = args[11] as Float,
+            infoFontSize = args[12] as Float
         )
     }.stateIn(
         viewModelScope,
@@ -57,10 +62,18 @@ class WatermarkSettingsViewModel @Inject constructor(
         }
     }
 
-    fun updateInfoSettings(showFile: Boolean, showPart: Boolean, x: Float, y: Float, size: Float) {
+    fun updateInfoSettings(    showFile: Boolean,
+                               showPart: Boolean,
+                               showDate: Boolean,
+                               showTime: Boolean,
+                               x: Float,
+                               y: Float,
+                               size: Float) {
         viewModelScope.launch {
             preferences.saveShowFilename(showFile)
             preferences.saveShowPart(showPart)
+            preferences.saveShowDate(showDate)
+            preferences.saveShowTime(showTime)
             preferences.saveInfoOffset(x, y)
             preferences.saveInfoFontSize(size)
         }
