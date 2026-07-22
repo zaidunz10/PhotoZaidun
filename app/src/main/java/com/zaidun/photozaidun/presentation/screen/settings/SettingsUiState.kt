@@ -1,6 +1,7 @@
 package com.zaidun.photozaidun.presentation.screen.settings
 
 import com.zaidun.photozaidun.data.auth.GoogleUser
+import com.zaidun.photozaidun.domain.model.DriveStorageInfo
 
 data class SettingsUiState(
     val googleUser: GoogleUser? = null,

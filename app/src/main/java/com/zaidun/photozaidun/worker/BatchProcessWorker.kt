@@ -9,7 +9,6 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
-import com.google.common.collect.Multimaps.index
 import com.zaidun.photozaidun.data.local.datastore.UserPreferencesDataStore
 import com.zaidun.photozaidun.data.processor.bitmap.BitmapProcessor
 import com.zaidun.photozaidun.domain.model.*
@@ -81,6 +80,12 @@ class BatchProcessWorker @AssistedInject constructor(
         val resize = preferences.resizePercent.first()
         val quality = preferences.jpegQuality.first()
         val suffix = preferences.fileSuffix.first()
+        val wmShowPart = preferences.showPart.first()
+        val wmLogoX = preferences.logoOffsetX.first()
+        val wmLogoY = preferences.logoOffsetY.first()
+        val wmInfoX = preferences.infoOffsetX.first()
+        val wmInfoY = preferences.infoOffsetY.first()
+        val wmInfoSize = preferences.infoFontSize.first()
         Timber.tag("DriveDr").d("Suffix dari DataStore = '$suffix'")
 
 
@@ -161,7 +166,15 @@ class BatchProcessWorker @AssistedInject constructor(
                                 opacity = wmOpacity,
                                 size = wmScale,
                                 showFilename = wmShowFilename,
-                                position = WatermarkPosition.valueOf(wmPos)
+                                position = WatermarkPosition.valueOf(wmPos),
+                                showPart = wmShowPart,
+                                logoOffsetX = wmLogoX,
+                                logoOffsetY = wmLogoY,
+                                infoOffsetX = wmInfoX,
+                                infoOffsetY = wmInfoY,
+                                infoSize = wmInfoSize
+
+
                             )
                         } else {
                             WatermarkConfig(

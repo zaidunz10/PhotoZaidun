@@ -5,9 +5,14 @@ import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.drive.Drive
 import jakarta.inject.Inject
 import jakarta.inject.Singleton
+import com.zaidun.photozaidun.data.drive.DriveServiceFactory
 
 @Singleton
-class DriveServiceFactory @Inject constructor() {
+class DriveServiceFactory @Inject constructor(
+
+) {
+
+
 
     fun create(
         accessToken: String

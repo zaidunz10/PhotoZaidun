@@ -3,17 +3,12 @@ package com.zaidun.photozaidun.presentation.screen.watermarksettings
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
-import android.provider.MediaStore
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import android.widget.Toast
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Save
@@ -23,26 +18,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import android.graphics.ImageDecoder
-import android.os.Build
-import android.util.Log
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.zaidun.photozaidun.utils.BitmapUtils
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil3.compose.AsyncImage
-import androidx.compose.foundation.Image
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.text.style.TextAlign
 import com.zaidun.photozaidun.data.processor.watermark.WatermarkDrawer
-import com.zaidun.photozaidun.domain.model.TextPosition
+import com.zaidun.photozaidun.utils.BitmapUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,270 +40,175 @@ fun WatermarkSettingsScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
 
-    // 1. STATE LOKAL (Agar Slider Mulus)
-    var selectedUri by remember(uiState.watermarkUri) { mutableStateOf(uiState.watermarkUri) }
-    var opacity by remember(uiState.opacity) { mutableFloatStateOf(uiState.opacity) }
-    var scale by remember(uiState.scale) { mutableFloatStateOf(uiState.scale) }
-    var position by remember(uiState.position) { mutableStateOf(uiState.position) }
-    var previewUri by remember(uiState.previewUri) {
-        mutableStateOf(uiState.previewUri)
-    }
-    var showFilename by remember(uiState.showFilename) { mutableStateOf(uiState.showFilename) }
-    var renderedPreview by remember {
-        mutableStateOf<Bitmap?>(null)
+    // 1. CACHE BITMAP (Kunci Performa Ringan)
+    var cachedPreview by remember { mutableStateOf<Bitmap?>(null) }
+    var cachedLogo by remember { mutableStateOf<Bitmap?>(null) }
+    var renderedPreview by remember { mutableStateOf<Bitmap?>(null) }
+
+    // State Lokal untuk Slider agar instan (tidak menunggu DataStore)
+    var logoOpacity by remember(uiState.opacity) { mutableFloatStateOf(uiState.opacity) }
+    var logoScale by remember(uiState.scale) { mutableFloatStateOf(uiState.scale) }
+    var logoX by remember(uiState.logoOffsetX) { mutableFloatStateOf(uiState.logoOffsetX) }
+    var logoY by remember(uiState.logoOffsetY) { mutableFloatStateOf(uiState.logoOffsetY) }
+
+    var infoX by remember(uiState.infoOffsetX) { mutableFloatStateOf(uiState.infoOffsetX) }
+    var infoY by remember(uiState.infoOffsetY) { mutableFloatStateOf(uiState.infoOffsetY) }
+    var infoSize by remember(uiState.infoFontSize) { mutableFloatStateOf(uiState.infoFontSize) }
+    var showFile by remember(uiState.showFilename) { mutableStateOf(uiState.showFilename) }
+    var showPart by remember(uiState.showPart) { mutableStateOf(uiState.showPart) }
+
+    // Load Preview Bitmap hanya jika URI berubah
+    LaunchedEffect(uiState.previewUri) {
+        if (uiState.previewUri.isNotBlank()) {
+            val original = BitmapUtils.loadBitmap(context, Uri.parse(uiState.previewUri))
+            // Resize ke 900px agar render preview enteng tapi tetap tajam
+            cachedPreview = WatermarkDrawer().createPreview(original, 900)
+        }
     }
 
-    // Picker Logo
+    // Load Logo Bitmap hanya jika URI berubah
+    LaunchedEffect(uiState.watermarkUri) {
+        if (uiState.watermarkUri.isNotBlank()) {
+            cachedLogo = BitmapUtils.loadBitmap(context, Uri.parse(uiState.watermarkUri))
+        }
+    }
+
+    // RENDER PREVIEW REALTIME (Sangat cepat karena hanya draw, tidak decode)
+    LaunchedEffect(cachedPreview, cachedLogo, logoOpacity, logoScale, logoX, logoY, infoX, infoY, infoSize, showFile, showPart) {
+        cachedPreview?.let { preview ->
+            renderedPreview = WatermarkDrawer().draw(
+                bitmap = preview,
+                watermark = cachedLogo,
+                alpha = logoOpacity,
+                scale = logoScale,
+                logoOffsetX = logoX,
+                logoOffsetY = logoY,
+                infoOffsetX = infoX,
+                infoOffsetY = infoY,
+                infoSize = infoSize,
+                showFilename = showFile,
+                showPart = showPart,
+                fileName = "IMG_0001.jpg",
+                partName = "Part 1"
+            )
+        }
+    }
+
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
-            context.contentResolver.takePersistableUriPermission(
-                it,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
-            selectedUri = it.toString()
-        }
-    }
-    val previewPicker =
-        rememberLauncherForActivityResult(
-            ActivityResultContracts.OpenDocument()
-        ) { uri ->
-
-            uri?.let {
-
-                context.contentResolver.takePersistableUriPermission(
-                    it,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-
-                previewUri = it.toString()
-                Log.d("URI", previewUri)
-            }
-
-        }
-    LaunchedEffect(previewUri, selectedUri, opacity, scale, position, showFilename) {
-        if (previewUri.isBlank() || selectedUri.isBlank()) {
-            renderedPreview = null
-            return@LaunchedEffect
-        }
-
-        try {
-            // Gunakan try-catch agar tidak Force Close jika izin ditolak
-            val preview = BitmapUtils.loadBitmap(context, Uri.parse(previewUri))
-            val logo = BitmapUtils.loadBitmap(context, Uri.parse(selectedUri))
-
-            val drawer = WatermarkDrawer()
-            val resizedPreview = drawer.createPreview(preview)
-
-            renderedPreview = drawer.draw(
-
-                bitmap = resizedPreview,
-
-                watermark = logo,
-
-                alpha = opacity,
-
-                scale = scale,
-
-                position = position,
-
-                showFilename = showFilename,
-
-                showPart = true,
-
-                fileName = "Contoh File Gambar.jpg",
-                partName = "Part 1",
-
-
-                textSize = 0.04f,
-
-                textGap = 16f,
-
-                textPosition = TextPosition.BELOW_LOGO
-
-            )
-        } catch (e: SecurityException) {
-            Log.e("Watermark", "Izin akses file ditolak: ${e.message}")
-            // Tampilkan pesan ke user daripada crash
-            Toast.makeText(
-                context,
-                "Izin akses foto hilang. Silakan pilih ulang foto.",
-                Toast.LENGTH_LONG
-            ).show()
-        } catch (e: Exception) {
-            Log.e("Watermark", "Gagal merender preview: ${e.message}")
+            context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            viewModel.saveLogoUri(it.toString())
         }
     }
 
+    val previewPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let {
+            context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            viewModel.savePreviewUri(it.toString())
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Watermark Settings") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) }
+                title = { Text("Watermark Editor", fontWeight = FontWeight.Bold) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) } },
+                actions = {
+                    Button(
+                        onClick = {
+                            viewModel.updateLogoSettings(logoOpacity, logoScale, logoX, logoY)
+                            viewModel.updateInfoSettings(showFile, showPart, infoX, infoY, infoSize)
+                            Toast.makeText(context, "Pengaturan Disimpan", Toast.LENGTH_SHORT).show()
+                            onBack()
+                        },
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Icon(Icons.Default.Save, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Simpan")
+                    }
                 }
             )
         }
     ) { padding ->
-        Column(modifier = Modifier
-            .padding(padding)
-            .fillMaxSize()) {
-            // AREA PENGATURAN (Scrollable)
+        Column(Modifier.padding(padding).fillMaxSize()) {
+            // Bagian Atas: Preview Box
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(0.4f)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (renderedPreview != null) {
+                    Image(
+                        bitmap = renderedPreview!!.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    Text("Pilih foto & logo untuk memulai", color = Color.Gray)
+                }
+            }
+
+            // Bagian Bawah: Kontrol (Scrollable)
             Column(
                 modifier = Modifier
-                    .weight(1f)
+                    .weight(0.6f)
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp)
             ) {
-                Button(
-                    onClick = { picker.launch(arrayOf("image/*")) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp)
-                ) { Text("Pilih Logo Watermark") }
-
-                Spacer(Modifier.height(24.dp))
-
-                Text("Opacity ${(opacity * 100).toInt()}%")
-                Slider(value = opacity, onValueChange = { opacity = it })
-
-                Spacer(Modifier.height(16.dp))
-
-                Text("Ukuran ${(scale * 100).toInt()}%")
-                Slider(value = scale, valueRange = 0.05f..1.0f, onValueChange = { scale = it })
-                // ... di bawah Slider ukuran ...
-                Spacer(Modifier.height(16.dp))
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showFilename = !showFilename } // Bisa klik teksnya juga
-                ) {
-                    Checkbox(
-                        checked = showFilename,
-                        onCheckedChange = { showFilename = it }
-                    )
-                    Text("Sertakan Nama File di Watermark", style = MaterialTheme.typography.bodyMedium)
-                }
-
-
-                Spacer(Modifier.height(24.dp))
-
-                // 2. LOGIC LIVE PREVIEW
-                Text(
-                    "Pratinjau Langsung",
-                    style = MaterialTheme.typography.titleMedium
-                )
-
-                Spacer(Modifier.height(12.dp))
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(220.dp)
-                        .border(
-                            1.dp,
-                            MaterialTheme.colorScheme.outlineVariant,
-                            RoundedCornerShape(12.dp)
-                        )
-                        .clip(RoundedCornerShape(12.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-
-                    if (renderedPreview != null) {
-
-                        Image(
-                            bitmap = renderedPreview!!.asImageBitmap(),
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Fit
-                        )
-
-                    } else {
-
-                        Text("Pilih logo dan foto preview")
-
+                // Pickers
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { previewPicker.launch(arrayOf("image/*")) }, Modifier.weight(1f)) {
+                        Text("Ganti Foto")
+                    }
+                    Button(onClick = { picker.launch(arrayOf("image/*")) }, Modifier.weight(1f)) {
+                        Text("Ganti Logo")
                     }
                 }
-                Spacer(Modifier.height(24.dp))
-                Button(
-                    onClick = {
-                        previewPicker.launch(arrayOf("image/*"))
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp)
-                ) {
-                    Text("Pilih Foto Preview")
-                }
+
                 Spacer(Modifier.height(24.dp))
 
-                // 3. PILIHAN POSISI
-                Text("Posisi", style = MaterialTheme.typography.titleMedium)
-                listOf(
-                    "TOP_LEFT",
-                    "TOP_RIGHT",
-                    "CENTER",
-                    "BOTTOM_LEFT",
-                    "BOTTOM_RIGHT"
-                ).forEach { item ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { position = item }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(selected = position == item, onClick = { position = item })
-                        Text(item)
-                    }
-                    Spacer(Modifier.height(24.dp))
+                // LOGO SETTINGS
+                Text("Logo Watermark", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                ControlSlider("Opacity", logoOpacity, 0f, 1f) { logoOpacity = it }
+                ControlSlider("Skala", logoScale, 0.05f, 0.8f) { logoScale = it }
+                ControlSlider("Posisi X", logoX, 0f, 1f) { logoX = it }
+                ControlSlider("Posisi Y", logoY, 0f, 1f) { logoY = it }
 
+                Spacer(Modifier.height(24.dp))
+
+                // FILE INFO SETTINGS
+                Text("Info File (Nama & Part)", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = showFile, onCheckedChange = { showFile = it })
+                    Text("Tampilkan Nama File")
                 }
-                Text(
-                    text = "Copyright by zaidunz_photo",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.LightGray,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center
-                )
-                Spacer(Modifier.height(16.dp))
-            }
-
-            // TOMBOL SIMPAN (Sticky Bottom)
-            Surface(tonalElevation = 3.dp) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    TextButton(onClick = onBack) { Text("Batal") }
-                    Button(
-                        onClick = {
-                            viewModel.save(
-                                logoUri = selectedUri,
-                                previewUri = previewUri,
-                                opacity = opacity,
-                                scale = scale,
-                                position = position,
-                                showFilename = showFilename
-                            )
-                            Toast.makeText(
-                                context,
-                                "Watermark berhasil disimpan",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                            onBack()
-                        },
-                        shape = RoundedCornerShape(24.dp)
-                    ) {
-                        Icon(Icons.Default.Save, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("SIMPAN")
-
-                    }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = showPart, onCheckedChange = { showPart = it })
+                    Text("Tampilkan Part")
                 }
+                ControlSlider("Ukuran Teks", infoSize, 0.01f, 0.1f) { infoSize = it }
+                ControlSlider("Posisi X", infoX, 0f, 1f) { infoX = it }
+                ControlSlider("Posisi Y", infoY, 0f, 1f) { infoY = it }
+
+                Spacer(Modifier.height(32.dp))
+                Text("zaidunz_photo © 2024", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, fontSize = 10.sp, color = Color.LightGray)
             }
         }
+    }
+}
+
+@Composable
+fun ControlSlider(label: String, value: Float, min: Float, max: Float, onValueChange: (Float) -> Unit) {
+    Column(Modifier.padding(vertical = 8.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, style = MaterialTheme.typography.bodySmall)
+            Text("${(value * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+        }
+        Slider(value = value, valueRange = min..max, onValueChange = onValueChange)
     }
 }

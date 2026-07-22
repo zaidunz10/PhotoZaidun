@@ -17,80 +17,60 @@ class WatermarkSettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
-
-    val uiState: StateFlow<WatermarkSettingsUiState> =
-        combine(
-            preferences.watermarkUri,
-            preferences.previewImageUri,
-            preferences.watermarkOpacity,
-            preferences.watermarkScale,
-            preferences.watermarkPosition
-        ) { uri, preview, opacity, scale, position ->
-
-            WatermarkSettingsUiState(
-                watermarkUri = uri,
-                previewUri = preview,
-                opacity = opacity,
-                scale = scale,
-                position = position
-            )
-
-        }.combine(preferences.showFilename) { state, showFilename ->
-
-            state.copy(
-                showFilename = showFilename
-            )
-
-        }.stateIn(
-            viewModelScope,
-            SharingStarted.WhileSubscribed(5000),
-            WatermarkSettingsUiState()
+    val uiState: StateFlow<WatermarkSettingsUiState> = combine(
+        preferences.watermarkUri,
+        preferences.previewImageUri,
+        preferences.watermarkOpacity,
+        preferences.watermarkScale,
+        preferences.showFilename,
+        preferences.showPart,
+        preferences.logoOffsetX,
+        preferences.logoOffsetY,
+        preferences.infoOffsetX,
+        preferences.infoOffsetY,
+        preferences.infoFontSize
+    ) { args ->
+        WatermarkSettingsUiState(
+            watermarkUri = args[0] as String,
+            previewUri = args[1] as String,
+            opacity = args[2] as Float,
+            scale = args[3] as Float,
+            showFilename = args[4] as Boolean,
+            showPart = args[5] as Boolean,
+            logoOffsetX = args[6] as Float,
+            logoOffsetY = args[7] as Float,
+            infoOffsetX = args[8] as Float,
+            infoOffsetY = args[9] as Float,
+            infoFontSize = args[10] as Float
         )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        WatermarkSettingsUiState()
+    )
 
-
-    fun save(
-
-        logoUri: String,
-
-        previewUri: String,
-
-        opacity: Float,
-
-        scale: Float,
-
-        position: String,
-        showFilename: Boolean
-
-    ) {
+    fun updateLogoSettings(opacity: Float, scale: Float, x: Float, y: Float) {
         viewModelScope.launch {
-            android.util.Log.d("WM_SAVE", "Save dipanggil")
-            preferences.saveWatermarkUri(logoUri)
-
-            preferences.savePreviewImageUri(previewUri)
-
             preferences.saveWatermarkOpacity(opacity)
-
             preferences.saveWatermarkScale(scale)
-
-            preferences.saveWatermarkPosition(position)
-            preferences.saveShowFilename(showFilename)
-            android.util.Log.d("WM_SAVE", "Selesai simpan")
+            preferences.saveLogoOffset(x, y)
         }
     }
 
-    fun saveWithText(
-        uri: String,
-        text: String,
-        opacity: Float,
-        scale: Float,
-        position: String
-    ) {
+    fun updateInfoSettings(showFile: Boolean, showPart: Boolean, x: Float, y: Float, size: Float) {
         viewModelScope.launch {
-            preferences.saveWatermarkUri(uri)
-            preferences.saveWatermarkText(text)
-            preferences.saveWatermarkOpacity(opacity)
-            preferences.saveWatermarkScale(scale)
-            preferences.saveWatermarkPosition(position)
+            preferences.saveShowFilename(showFile)
+            preferences.saveShowPart(showPart)
+            preferences.saveInfoOffset(x, y)
+            preferences.saveInfoFontSize(size)
         }
+    }
+
+    fun savePreviewUri(uri: String) {
+        viewModelScope.launch { preferences.savePreviewImageUri(uri) }
+    }
+
+    fun saveLogoUri(uri: String) {
+        viewModelScope.launch { preferences.saveWatermarkUri(uri) }
     }
 }

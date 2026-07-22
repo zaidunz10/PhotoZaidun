@@ -148,17 +148,18 @@ class BitmapProcessor(private val context: Context) {
             watermark = logo,
             alpha = config.opacity,
             scale = config.size,
-            position = config.position.name,
+            logoOffsetX = config.logoOffsetX,
+            logoOffsetY = config.logoOffsetY,
 
             showFilename = config.showFilename,
-            showPart = true,
+            showPart = config.showPart,
 
             fileName = fileName,
             partName = partName,
 
-            textSize = config.textSize,
-            textGap = config.textGap,
-            textPosition = config.textPosition
+            infoOffsetX = config.infoOffsetX,
+            infoOffsetY = config.infoOffsetY,
+            infoSize = config.infoSize
         )
         logo.recycle()
 

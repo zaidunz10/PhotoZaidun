@@ -1,4 +1,5 @@
 package com.zaidun.photozaidun.presentation.screen.home
+import com.zaidun.photozaidun.domain.model.DriveStorageInfo
 import com.zaidun.photozaidun.domain.model.PhotoItem
 
 data class HomeUiState(
@@ -23,5 +24,8 @@ data class HomeUiState(
     val darkMode: Boolean = false,
     val currentFilename: String = "",
     val current: Int = 0,
-    val total: Int = 0
+    val total: Int = 0,
+    val driveStorage: DriveStorageInfo? = null,
+
+    val loadingDriveStorage: Boolean = false
 )

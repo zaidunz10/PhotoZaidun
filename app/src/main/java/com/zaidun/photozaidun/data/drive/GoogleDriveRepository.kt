@@ -1,4 +1,5 @@
 package com.zaidun.photozaidun.data.drive
+import com.zaidun.photozaidun.domain.model.DriveStorageInfo
 
 import android.R.attr.query
 import com.google.api.client.http.FileContent
@@ -10,6 +11,28 @@ import java.io.File as JavaFile
 import javax.inject.Inject
 
 class GoogleDriveRepository @Inject constructor() {
+    suspend fun getStorageInfo(drive: Drive
+
+    ): DriveStorageInfo {
+
+        val about = drive.about()
+            .get()
+            .setFields("user,storageQuota")
+            .execute()
+
+        val quota = about.storageQuota
+
+        return DriveStorageInfo(
+
+            email = about.user.emailAddress,
+
+            totalBytes = quota.limit,
+
+            usedBytes = quota.usage
+
+        )
+
+    }
 
     fun findFolder(
         drive: Drive,

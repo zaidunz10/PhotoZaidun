@@ -30,6 +30,7 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
         private val MAIN_FOLDER = stringPreferencesKey("main_folder")
         private val PART_FOLDER = stringPreferencesKey("part_folder")
         private val FILE_SUFFIX = stringPreferencesKey("file_suffix")
+        private val FOLDER_DISPLAY_NAME = stringPreferencesKey("folder_display_name")
         private val MAX_PHOTO_PER_FOLDER = intPreferencesKey("max_photo_per_folder")
         private val WATERMARK_URI = stringPreferencesKey("watermark_uri")
         private val WATERMARK_SCALE = floatPreferencesKey("watermark_scale")
@@ -43,20 +44,36 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
         private val LAST_FOLDER = stringPreferencesKey("last_folder")
         private val PREVIEW_IMAGE_URI = stringPreferencesKey("preview_image_uri")
         private val SHOW_FILENAME = booleanPreferencesKey("show_filename")
+        private val SHOW_PART = booleanPreferencesKey("show_part")
 
         private val DRIVE_ACCESS_TOKEN = stringPreferencesKey("drive_access_token")
+
+        // New Offset & Info Block keys
+        private val LOGO_OFFSET_X = floatPreferencesKey("logo_offset_x")
+        private val LOGO_OFFSET_Y = floatPreferencesKey("logo_offset_y")
+        private val INFO_OFFSET_X = floatPreferencesKey("info_offset_x")
+        private val INFO_OFFSET_Y = floatPreferencesKey("info_offset_y")
+        private val INFO_FONT_SIZE = floatPreferencesKey("info_font_size")
 
     }
 
     val userId: Flow<String> = context.dataStore.data.map { it[USER_ID_KEY] ?: "" }
     val userName: Flow<String> = context.dataStore.data.map { it[USER_NAME_KEY] ?: "" }
     val userEmail: Flow<String> = context.dataStore.data.map { it[USER_EMAIL_KEY] ?: "" }
+    val folderDisplayName =
+        context.dataStore.data.map {
+            it[FOLDER_DISPLAY_NAME] ?: ""
+        }
     val driveAccessToken: Flow<String> =
         context.dataStore.data.map { prefs ->
             prefs[DRIVE_ACCESS_TOKEN] ?: ""
         }
 
-
+    suspend fun saveFolderDisplayName(name: String) {
+        context.dataStore.edit {
+            it[FOLDER_DISPLAY_NAME] = name
+        }
+    }
     suspend fun saveUser(user: GoogleUser) {
         context.dataStore.edit {
             it[USER_ID_KEY] = user.id
@@ -98,6 +115,9 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
     }
     suspend fun saveShowFilename(value: Boolean) {
         context.dataStore.edit { it[SHOW_FILENAME] = value }
+    }
+    suspend fun saveShowPart(value: Boolean) {
+        context.dataStore.edit { it[SHOW_PART] = value }
     }
 
 
@@ -141,12 +161,39 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
         context.dataStore.edit { it[LAST_FOLDER] = value }
     }
 
+    suspend fun saveLogoOffset(x: Float, y: Float) {
+        context.dataStore.edit {
+            it[LOGO_OFFSET_X] = x
+            it[LOGO_OFFSET_Y] = y
+        }
+    }
+
+    suspend fun saveInfoOffset(x: Float, y: Float) {
+        context.dataStore.edit {
+            it[INFO_OFFSET_X] = x
+            it[INFO_OFFSET_Y] = y
+        }
+    }
+
+    suspend fun saveInfoFontSize(value: Float) {
+        context.dataStore.edit { it[INFO_FONT_SIZE] = value }
+    }
+
     // Expose Flows
     val watermarkText: Flow<String> = context.dataStore.data.map { it[WATERMARK_TEXT] ?: "" }
     val showFilename: Flow<Boolean> =
         context.dataStore.data.map { prefs ->
-            prefs[SHOW_FILENAME] ?: false
+            prefs[SHOW_FILENAME] ?: true
         }
+    val showPart: Flow<Boolean> =
+        context.dataStore.data.map { it[SHOW_PART] ?: true }
+
+    val logoOffsetX: Flow<Float> = context.dataStore.data.map { it[LOGO_OFFSET_X] ?: 0.02f }
+    val logoOffsetY: Flow<Float> = context.dataStore.data.map { it[LOGO_OFFSET_Y] ?: 0.02f }
+    val infoOffsetX: Flow<Float> = context.dataStore.data.map { it[INFO_OFFSET_X] ?: 0.02f }
+    val infoOffsetY: Flow<Float> = context.dataStore.data.map { it[INFO_OFFSET_Y] ?: 0.05f }
+    val infoFontSize: Flow<Float> = context.dataStore.data.map { it[INFO_FONT_SIZE] ?: 0.04f }
+
     val rootFolder: Flow<String> = context.dataStore.data.map { it[ROOT_FOLDER] ?: "Folder indux Mu" }
     val previewImageUri: Flow<String> = context.dataStore.data.map { it[PREVIEW_IMAGE_URI] ?: "" }
     val watermarkUri: Flow<String> = context.dataStore.data.map { it[WATERMARK_URI] ?: "" }

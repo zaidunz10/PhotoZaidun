@@ -19,16 +19,19 @@ import com.zaidun.photozaidun.data.file.ExportFolderRepository
 import androidx.documentfile.provider.DocumentFile
 import androidx.work.WorkInfo
 import com.zaidun.photozaidun.data.auth.GoogleAuthManager
+import com.zaidun.photozaidun.data.drive.DriveServiceFactory
+import com.zaidun.photozaidun.data.drive.GoogleDriveRepository
 import com.zaidun.photozaidun.domain.model.PhotoItem
 import com.zaidun.photozaidun.worker.DriveUploadWorker.Companion.KEY_ACCESS_TOKEN
 import com.zaidun.photozaidun.worker.KEY_OUTPUT_FOLDER
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.util.UUID
 import javax.inject.Inject
-
+import kotlinx.coroutines.Dispatchers
 
 
 
@@ -38,10 +41,11 @@ data class DriveAuthResult(
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val workManager: WorkManager,
-
+    private val driveServiceFactory: DriveServiceFactory,
     private val preferences: UserPreferencesDataStore,
     private val googleAuthManager: GoogleAuthManager,
-    private val exportFolderRepository: ExportFolderRepository
+    private val exportFolderRepository: ExportFolderRepository,
+    private val googleDriveRepository: GoogleDriveRepository
 
 
 
@@ -57,7 +61,7 @@ class HomeViewModel @Inject constructor(
         workManager
             .getWorkInfoByIdLiveData(id)
             .observeForever { work ->
-        Timber.d("OBSERVER MASUK")
+                Timber.d("OBSERVER MASUK")
 
                 if (work == null) return@observeForever
 
@@ -125,6 +129,7 @@ class HomeViewModel @Inject constructor(
             Timber.d("TOKEN BERHASIL DISIMPAN")
         }
     }
+
     fun cancelExport() {
 
         workManager.cancelAllWorkByTag("EXPORT")
@@ -208,6 +213,57 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun loadDriveStorage() {
+
+
+        viewModelScope.launch {
+
+            try {
+
+                val token = preferences.driveAccessToken.first()
+
+                val drive = driveServiceFactory.create(token)
+
+                val storage = withContext(Dispatchers.IO) {
+
+                    googleDriveRepository.getStorageInfo(drive)
+
+                }
+
+                _uiState.update {
+                    it.copy(
+                        driveStorage = storage,
+                        loadingDriveStorage = false
+                    )
+                }
+
+            }catch (e: Exception) {
+
+                Timber.e(e)
+
+                _uiState.update {
+
+                    it.copy(
+                        loadingDriveStorage = false
+                    )
+
+                }
+
+            }
+
+        }
+    }
+
+    fun initialize(activity: Activity) {
+
+        refreshTokenForUpload(activity) {
+
+            loadDriveStorage()
+
+        }
+
+    }
+
     // Fungsi tambahan untuk memperbarui state folder dari UI
     fun updateSelectedFolder(
         uri: String,
@@ -232,11 +288,13 @@ class HomeViewModel @Inject constructor(
         }
 
     }
+
     fun prepareExport(
         accessToken: String
     ) {
         startBatchProcess(accessToken)
     }
+
     fun refreshTokenForUpload(
         activity: Activity,
         onTokenReady: (String) -> Unit
@@ -248,7 +306,15 @@ class HomeViewModel @Inject constructor(
 
             onTokenReady = { token ->
 
-                onTokenReady(token)
+                viewModelScope.launch {
+
+                    preferences.saveDriveAccessToken(token)
+
+                    loadDriveStorage()
+
+                    onTokenReady(token)
+
+                }
 
             },
 
@@ -272,6 +338,7 @@ class HomeViewModel @Inject constructor(
         )
 
     }
+
     fun openGoogleDrive(context: Context) {
         val intent = Intent(Intent.ACTION_VIEW).apply {
             data = Uri.parse("https://drive.google.com")
@@ -285,6 +352,7 @@ class HomeViewModel @Inject constructor(
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://drive.google.com")))
         }
     }
+
     fun startBatchProcess(accessToken: String) {
 
         _uiState.update {
@@ -315,3 +383,4 @@ class HomeViewModel @Inject constructor(
         workManager.enqueue(request)
     }
 }
+

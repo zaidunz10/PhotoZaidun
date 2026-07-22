@@ -119,6 +119,7 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+
     // Fungsi Save Responsif (Update UI Langsung + Simpan DB)
     fun saveRootFolder(v: String) { _uiState.update { it.copy(rootFolder = v) }; viewModelScope.launch { preferences.saveRootFolder(v) } }
     fun saveMainFolder(v: String) { _uiState.update { it.copy(mainFolder = v) }; viewModelScope.launch { preferences.saveMainFolder(v) } }
