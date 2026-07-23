@@ -144,7 +144,6 @@ fun WatermarkSettingsScreen(
         }
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            // Bagian Atas: Preview Box
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
