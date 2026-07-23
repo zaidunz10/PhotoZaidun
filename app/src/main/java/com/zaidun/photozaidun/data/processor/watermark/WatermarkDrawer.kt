@@ -36,6 +36,7 @@ class WatermarkDrawer {
         fileName: String = "",
         partName: String = "",
         infoOffsetX: Float = 0.02f,
+        exifDate: String = "",
         infoOffsetY: Float = 0.05f,
         infoSize: Float = 0.04f,
         textGap: Float = 12f
@@ -81,8 +82,10 @@ class WatermarkDrawer {
         // 2. Draw Text Block (Nama File & Part)
         val text = buildString {
             if (showFilename) append(fileName.substringBeforeLast('.'))
-            if (showFilename && showPart) append("  •  ")
+            if (showFilename && (showPart || exifDate.isNotBlank())) append("  •  ")
             if (showPart) append(partName)
+            if (showPart && exifDate.isNotBlank()) append("  •  ")
+            if (exifDate.isNotBlank()) append(exifDate)
         }
 
         if (text.isNotBlank()) {

@@ -53,7 +53,7 @@ fun WatermarkSettingsScreen(
     var logoScale by remember(uiState.scale) { mutableFloatStateOf(uiState.scale) }
     var logoX by remember(uiState.logoOffsetX) { mutableFloatStateOf(uiState.logoOffsetX) }
     var logoY by remember(uiState.logoOffsetY) { mutableFloatStateOf(uiState.logoOffsetY) }
-
+    var showTimestamp by remember(uiState.showTimestamp) { mutableStateOf(uiState.showTimestamp) }
     var infoX by remember(uiState.infoOffsetX) { mutableFloatStateOf(uiState.infoOffsetX) }
     var infoY by remember(uiState.infoOffsetY) { mutableFloatStateOf(uiState.infoOffsetY) }
     var infoSize by remember(uiState.infoFontSize) { mutableFloatStateOf(uiState.infoFontSize) }
@@ -98,8 +98,7 @@ fun WatermarkSettingsScreen(
                 infoOffsetY = infoY,
                 infoSize = infoSize,
                 showFilename = showFile,
-                showPart = showPart,
-                fileName = "IMG_0001.jpg",
+                showPart = showPart, exifDate = if (showTimestamp) "Sabtu, 25 Oktober 2023  14:30" else "", // Dummy date untuk preview fileName = "IMG_0001.jpg",
                 partName = "Part 1"
             )
         }
@@ -129,6 +128,7 @@ fun WatermarkSettingsScreen(
                         onClick = {
                             viewModel.updateLogoSettings(logoOpacity, logoScale, logoX, logoY)
                             viewModel.updateInfoSettings(showFile, showPart, infoX, infoY, infoSize)
+                            viewModel.updateTimestamp(showTimestamp)
                             Toast.makeText(context, "Pengaturan Disimpan", Toast.LENGTH_SHORT).show()
                             onBack()
                         },
@@ -201,6 +201,10 @@ fun WatermarkSettingsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = showPart, onCheckedChange = { showPart = it })
                     Text("Tampilkan Part")
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = showTimestamp, onCheckedChange = { showTimestamp = it })
+                    Text("Tampilkan Tanggal dan jam")
                 }
                 ControlSlider("Ukuran Teks", infoSize, 0.01f, 0.1f) { infoSize = it }
                 ControlSlider("Posisi X", infoX, 0f, 1f) { infoX = it }

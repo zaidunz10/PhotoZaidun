@@ -13,6 +13,7 @@ data class SettingsUiState(
     val partFolder: String = "part",
 
     val fileSuffix: String = "",
+    val startPartNumber: Int = 1,
 
     val resizePercent: String = "100",
 

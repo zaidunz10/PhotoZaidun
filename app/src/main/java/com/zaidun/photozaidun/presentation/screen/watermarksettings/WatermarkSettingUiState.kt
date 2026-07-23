@@ -7,6 +7,7 @@ data class WatermarkSettingsUiState(
     val scale: Float = 0.2f,
     val showFilename: Boolean = true,
     val showPart: Boolean = true,
+    val showTimestamp: Boolean = true,
     val logoOffsetX: Float = 0.02f,
     val logoOffsetY: Float = 0.02f,
     val infoOffsetX: Float = 0.02f,

@@ -26,7 +26,7 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
         private val USER_ID_KEY = stringPreferencesKey("user_id")
         private val USER_NAME_KEY = stringPreferencesKey("user_name")
         private val USER_EMAIL_KEY = stringPreferencesKey("user_email")
-
+        private val START_PART_NUMBER = intPreferencesKey("start_part_number")
         private val ROOT_FOLDER = stringPreferencesKey("root_folder")
         private val MAIN_FOLDER = stringPreferencesKey("main_folder")
         private val PART_FOLDER = stringPreferencesKey("part_folder")
@@ -46,10 +46,8 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
         private val PREVIEW_IMAGE_URI = stringPreferencesKey("preview_image_uri")
         private val SHOW_FILENAME = booleanPreferencesKey("show_filename")
         private val SHOW_PART = booleanPreferencesKey("show_part")
-
+        private val SHOW_TIMESTAMP = booleanPreferencesKey("show_timestamp")
         private val DRIVE_ACCESS_TOKEN = stringPreferencesKey("drive_access_token")
-
-        // New Offset & Info Block keys
         private val LOGO_OFFSET_X = floatPreferencesKey("logo_offset_x")
         private val LOGO_OFFSET_Y = floatPreferencesKey("logo_offset_y")
         private val INFO_OFFSET_X = floatPreferencesKey("info_offset_x")
@@ -65,15 +63,26 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
         context.dataStore.data.map {
             it[FOLDER_DISPLAY_NAME] ?: ""
         }
+    val showTimestamp: Flow<Boolean> = context.dataStore.data.map { it[SHOW_TIMESTAMP] ?: true }
+
     val driveAccessToken: Flow<String> =
         context.dataStore.data.map { prefs ->
             prefs[DRIVE_ACCESS_TOKEN] ?: ""
         }
+    val startPartNumber: Flow<Int> = context.dataStore.data.map { it[START_PART_NUMBER] ?: 1 }
+
+    suspend fun saveStartPartNumber(value: Int) {
+        context.dataStore.edit { it[START_PART_NUMBER] = value }
+    }
+
 
     suspend fun saveFolderDisplayName(name: String) {
         context.dataStore.edit {
             it[FOLDER_DISPLAY_NAME] = name
         }
+    }
+    suspend fun saveShowTimestamp(value: Boolean) {
+        context.dataStore.edit { it[SHOW_TIMESTAMP] = value }
     }
     suspend fun saveUser(user: GoogleUser) {
         context.dataStore.edit {

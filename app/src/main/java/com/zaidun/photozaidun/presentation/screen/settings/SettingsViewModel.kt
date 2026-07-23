@@ -45,8 +45,8 @@ class SettingsViewModel @Inject constructor(
                 preferences.resizePercent,
                 preferences.maxPhotoPerFolder,
                 preferences.autoUpload,
-                preferences.driveAccessToken
-
+                preferences.driveAccessToken,
+                preferences.startPartNumber
             ) { args: Array<Any?> ->
                 val id = args[0] as String
                 val name = args[1] as String
@@ -59,6 +59,7 @@ class SettingsViewModel @Inject constructor(
                 val max = args[8] as Int
                 val auto = args[9] as Boolean
                 val token = args[10] as String
+                val startPart = args[11] as Int
 
                 val user = if (id.isNotEmpty()) GoogleUser(id, name, email, null) else null
 
@@ -72,7 +73,8 @@ class SettingsViewModel @Inject constructor(
                         fileSuffix = suffix,
                         resizePercent = resize.toString(),
                         maxPhotoPerFolder = max.toString(),
-                        autoUpload = auto
+                        autoUpload = auto,
+                        startPartNumber = startPart
                     )
                 }
             }.collect()
@@ -97,7 +99,7 @@ class SettingsViewModel @Inject constructor(
                         onTokenReady = { token ->
                             viewModelScope.launch { preferences.saveDriveAccessToken(token) }
 
-                                Timber.tag("Drive").d("TOKEN DITERIMA = $token")
+                            Timber.tag("Drive").d("TOKEN DITERIMA = $token")
 
                         },
                         onNeedConsent = onNeedConsent,
@@ -125,11 +127,15 @@ class SettingsViewModel @Inject constructor(
     fun saveMainFolder(v: String) { _uiState.update { it.copy(mainFolder = v) }; viewModelScope.launch { preferences.saveMainFolder(v) } }
     fun savePartFolder(v: String) { _uiState.update { it.copy(partFolder = v) }; viewModelScope.launch { preferences.savePartFolder(v) } }
     fun saveFileSuffix(v: String) { _uiState.update { it.copy(fileSuffix = v) }; viewModelScope.launch { preferences.saveFileSuffix(v) } }
-
+    fun saveStartPart(v: Int) {
+        _uiState.update { it.copy(startPartNumber = v) }
+        viewModelScope.launch { preferences.saveStartPartNumber(v) }
+    }
     fun saveResizePercent(v: String) {
         _uiState.update { it.copy(resizePercent = v) }
         viewModelScope.launch { v.toIntOrNull()?.let { preferences.saveResizePercent(it) } }
     }
+
     fun saveMaxPhoto(v: String) {
         _uiState.update { it.copy(maxPhotoPerFolder = v) }
         viewModelScope.launch { v.toIntOrNull()?.let { preferences.saveMaxPhotoPerFolder(it) } }

@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -41,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.lazy.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -298,6 +300,28 @@ fun SettingsScreen(
                     fieldLabel = "Prefix Nama Part",
                     placeholder = "Contoh: Part",
                     supportingText = "Akan menjadi ${uiState.partFolder}1, dst."
+                )
+            }
+
+            item {
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    // Tambahkan .toString() karena TextField hanya mau Teks
+                    value = uiState.startPartNumber.toString(),
+                    onValueChange = {
+                        // Ambil angka saja, lalu ubah ke Int untuk disimpan ke ViewModel
+                        val newValue = it.filter { char -> char.isDigit() }.toIntOrNull() ?: 1
+                        viewModel.saveStartPart(newValue)
+                    },
+                    label = { Text("Mulai dari Part Ke-") },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    leadingIcon = { Icon(Icons.Default.PlayArrow, null, tint = AccentPurple) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = AccentPurple,
+                        focusedLabelColor = AccentPurple
+                    )
                 )
             }
 

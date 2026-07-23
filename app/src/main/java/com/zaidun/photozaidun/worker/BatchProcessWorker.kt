@@ -32,6 +32,7 @@ class BatchProcessWorker @AssistedInject constructor(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
+
         // 1. JADIKAN FOREGROUND SEGERA
         try {
             setForeground(createForegroundInfo("Menyiapkan pemrosesan..."))
@@ -59,6 +60,7 @@ class BatchProcessWorker @AssistedInject constructor(
         val inputFolder = DocumentFile.fromTreeUri(applicationContext, Uri.parse(inputFolderUriStr)) ?: return Result.failure()
 
         // Ambil Pengaturan
+        val wmShowTimestamp = preferences.showTimestamp.first()
         val mainFolderName = preferences.mainFolder.first()
         val partPrefix = preferences.partFolder.first()
         val maxPhotos = preferences.maxPhotoPerFolder.first()
@@ -79,6 +81,7 @@ class BatchProcessWorker @AssistedInject constructor(
         val wmInfoX = preferences.infoOffsetX.first()
         val wmInfoY = preferences.infoOffsetY.first()
         val wmInfoSize = preferences.infoFontSize.first()
+            val startFrom = preferences.startPartNumber.first()
 
         val outputBaseFolder = if (mainFolderName.isBlank()) inputFolder else {
             inputFolder.findFile(mainFolderName) ?: inputFolder.createDirectory(mainFolderName) ?: inputFolder
@@ -91,9 +94,10 @@ class BatchProcessWorker @AssistedInject constructor(
                 .sortedBy { it.name?.lowercase() }
 
             var photoCount = 0
-            var currentPart = 1
+            var currentPart = startFrom
             var currentOutputFolder = outputBaseFolder.findFile("${partPrefix}$currentPart")
                 ?: outputBaseFolder.createDirectory("${partPrefix}$currentPart")
+
 
             imageFiles.forEachIndexed { index, file ->
                 val outputFileName = generateNewName(file.name, suffix)
@@ -153,8 +157,10 @@ class BatchProcessWorker @AssistedInject constructor(
                                 resizeConfig = ResizeConfig(percentage = resize),
                                 fileName = outputFileName,
                                 partName = "${partPrefix}$currentPart",
+                                exifDate = "",
                                 compressionConfig = CompressionConfig(quality = quality),
-                                outputStream = outStream
+                                outputStream = outStream,
+                                showTimestamp = wmShowTimestamp
                             )
 
                             setProgress(workDataOf(

@@ -10,6 +10,7 @@ enum class OutputFormat { JPEG, PNG, WEBP }
 data class WatermarkConfig(
     val type: WatermarkType = WatermarkType.TEXT,
     val text: String = "Photo Zaidun",
+    val showTimestamp: Boolean = true,
     val imageUri: Uri? = null,
     val opacity: Float = 0.8f,
     val size: Float = 0.2f,

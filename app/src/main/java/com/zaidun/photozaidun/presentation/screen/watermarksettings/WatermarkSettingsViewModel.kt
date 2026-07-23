@@ -1,7 +1,6 @@
 package com.zaidun.photozaidun.presentation.screen.watermarksettings
 
 import android.content.Context
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zaidun.photozaidun.data.local.datastore.UserPreferencesDataStore
@@ -22,6 +21,7 @@ class WatermarkSettingsViewModel @Inject constructor(
         preferences.watermarkUri,
         preferences.previewImageUri,
         preferences.watermarkOpacity,
+        preferences.showTimestamp,
         preferences.watermarkScale,
         preferences.showFilename,
         preferences.showPart,
@@ -38,11 +38,12 @@ class WatermarkSettingsViewModel @Inject constructor(
             scale = args[3] as Float,
             showFilename = args[4] as Boolean,
             showPart = args[5] as Boolean,
-            logoOffsetX = args[6] as Float,
-            logoOffsetY = args[7] as Float,
-            infoOffsetX = args[8] as Float,
-            infoOffsetY = args[9] as Float,
-            infoFontSize = args[10] as Float
+            showTimestamp = args[7] as Boolean,
+            logoOffsetX = args[8] as Float,
+            logoOffsetY = args[9] as Float,
+            infoOffsetX = args[10] as Float,
+            infoOffsetY = args[11] as Float,
+            infoFontSize = args[12] as Float
         )
     }.stateIn(
         viewModelScope,
@@ -58,13 +59,20 @@ class WatermarkSettingsViewModel @Inject constructor(
         }
     }
 
-    fun updateInfoSettings(showFile: Boolean, showPart: Boolean, x: Float, y: Float, size: Float) {
+
+            fun updateInfoSettings(showFile: Boolean, showPart: Boolean, x: Float, y: Float, size: Float) {
         viewModelScope.launch {
             Timber.d("UPDATE INFO")
             preferences.saveShowFilename(showFile)
             preferences.saveShowPart(showPart)
             preferences.saveInfoOffset(x, y)
             preferences.saveInfoFontSize(size)
+        }
+    }
+
+    fun updateTimestamp(enabled: Boolean) {
+        viewModelScope.launch {
+            preferences.saveShowTimestamp(enabled)
         }
     }
 

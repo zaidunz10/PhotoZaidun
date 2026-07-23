@@ -8,10 +8,10 @@ import com.zaidun.photozaidun.domain.model.*
 import timber.log.Timber
 import java.io.OutputStream
 import androidx.core.graphics.scale
-
-
+import java.text.SimpleDateFormat
+import java.util.*
 class BitmapProcessor(private val context: Context) {
-        private val drawer = WatermarkDrawer()
+    private val drawer = WatermarkDrawer()
     fun clearCache() {
         cachedLogo?.recycle()
         cachedLogo = null
@@ -19,6 +19,30 @@ class BitmapProcessor(private val context: Context) {
 
         drawer.clearCache()
     }
+    // Di dalam BitmapProcessor.kt
+
+    private fun getOriginalDateTime(uri: Uri): String {
+        return try {
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                val exif = ExifInterface(inputStream)
+                // TAG_DATETIME_ORIGINAL biasanya berisi format "yyyy:MM:dd HH:mm:ss"
+                val dateTime = exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
+
+                if (!dateTime.isNullOrBlank()) {
+                    // Ubah format "2023:10:25 14:30:05" menjadi "25-10-2023 14:30"
+                    val parts = dateTime.split(" ")
+                    val dateParts = parts[0].split(":")
+                    val timeParts = parts[1].split(":")
+                    "${dateParts[2]}-${dateParts[1]}-${dateParts[0]}  ${timeParts[0]}:${timeParts[1]}"
+                } else {
+                    ""
+                }
+            } ?: ""
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
     fun process(
         inputUri: Uri,
         watermarkConfig: WatermarkConfig,
@@ -26,9 +50,10 @@ class BitmapProcessor(private val context: Context) {
         fileName: String,
         partName: String,
         compressionConfig: CompressionConfig,
-        outputStream: OutputStream
+        outputStream: OutputStream,
+        showTimestamp: Boolean
     ) {
-
+        val exifDate = if (showTimestamp) getExifDate(inputUri) else ""
 
         var bitmap: Bitmap? = null
         try {
@@ -42,7 +67,7 @@ class BitmapProcessor(private val context: Context) {
             if (resized != bitmap) { bitmap.recycle(); bitmap = resized }
 
             // 2. Watermark (Kirim fileName ke sini)
-            val watermarked = applyWatermark(bitmap, fileName,partName, watermarkConfig)
+            val watermarked = applyWatermark(bitmap, fileName, partName, exifDate, watermarkConfig)
             if (watermarked != bitmap) { bitmap.recycle(); bitmap = watermarked }
 
             // 3. Simpan
@@ -62,6 +87,34 @@ class BitmapProcessor(private val context: Context) {
     }
     private var cachedLogo: Bitmap? = null
     private var cachedLogoUri: Uri? = null
+
+    private fun getExifDate(uri: Uri): String {
+        return try {
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                val exif = ExifInterface(inputStream)
+                // Format asli EXIF: "yyyy:MM:dd HH:mm:ss"
+                val dateString = exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
+
+                if (!dateString.isNullOrBlank()) {
+                    val parser = SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US)
+                    val date = parser.parse(dateString)
+
+                    if (date != null) {
+                        // Format: "Kamis, 25 Oktober 2023  14:30"
+                        val formatter = SimpleDateFormat("EEEE, d MMMM yyyy  HH:mm", Locale("id", "ID"))
+                        formatter.format(date)
+                    } else {
+                        ""
+                    }
+                } else {
+                    ""
+                }
+            } ?: ""
+        } catch (e: Exception) {
+            Timber.e(e, "Gagal membaca EXIF date")
+            ""
+        }
+    }
     private fun calculateInSampleSize(
         width: Int,
         height: Int,
@@ -227,6 +280,7 @@ class BitmapProcessor(private val context: Context) {
         bitmap: Bitmap,
         fileName: String,
         partName: String,
+        exifDate: String,
         config: WatermarkConfig
     ): Bitmap {
 
@@ -268,7 +322,7 @@ class BitmapProcessor(private val context: Context) {
             scale = config.size,
             logoOffsetX = config.logoOffsetX,
             logoOffsetY = config.logoOffsetY,
-
+            exifDate = exifDate,
             showFilename = config.showFilename,
             showPart = config.showPart,
 
@@ -288,7 +342,9 @@ class BitmapProcessor(private val context: Context) {
         bitmap: Bitmap,
         fileName: String,
         partName: String,
+        exifDate: String,
         config: WatermarkConfig
+
     ): Bitmap {
 
         return when (config.type) {
@@ -305,7 +361,8 @@ class BitmapProcessor(private val context: Context) {
                     bitmap,
                     fileName,
                     partName,
-                    config,
+                    exifDate,
+                    config
 
                 )
         }
