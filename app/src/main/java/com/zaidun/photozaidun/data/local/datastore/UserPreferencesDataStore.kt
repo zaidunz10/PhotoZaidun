@@ -11,6 +11,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.zaidun.photozaidun.data.auth.GoogleUser
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import timber.log.Timber
 import javax.inject.Inject
 
 // Definisi properti ekstensi DataStore
@@ -114,9 +115,11 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
         context.dataStore.edit { it[WATERMARK_TEXT] = value }
     }
     suspend fun saveShowFilename(value: Boolean) {
+        Timber.d("SAVE SHOW FILE = $value")
         context.dataStore.edit { it[SHOW_FILENAME] = value }
     }
     suspend fun saveShowPart(value: Boolean) {
+        Timber.d("SAVE SHOW PART = $value")
         context.dataStore.edit { it[SHOW_PART] = value }
     }
 

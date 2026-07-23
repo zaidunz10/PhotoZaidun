@@ -53,15 +53,11 @@ class DriveUploadWorker @AssistedInject constructor(
         val folderUriStr = inputData.getString("folder_uri") ?: return Result.failure()
         val folderUri = Uri.parse(folderUriStr)
 
-        val token =
-            inputData.getString(KEY_ACCESS_TOKEN)
-                ?: return Result.failure()
-        Timber.d("Drive Token = ${token.take(20)}...")
+        val token = preferences.driveAccessToken.first()
+
         if (token.isBlank()) {
-
             Timber.e("Access Token kosong")
-
-            showFinalNotification(false, "Token akses tidak tersedia")
+            showFinalNotification(false, "Token Google Drive tidak tersedia")
             return Result.failure()
         }
         val drive = driveServiceFactory.create(token)
@@ -119,8 +115,10 @@ class DriveUploadWorker @AssistedInject constructor(
                 401 -> {
 
                     Timber.e("Access Token expired")
+                    showFinalNotification(false, "Sesi Drive habis, silakan coba lagi")
 
-                    Result.retry()
+
+                    Result.failure()
 
                 }
 
@@ -150,13 +148,7 @@ class DriveUploadWorker @AssistedInject constructor(
 
                 }
 
-                else -> {
-
-                    Timber.e(e)
-
-                    Result.retry()
-
-                }
+                else -> Result.retry()
 
             }
 

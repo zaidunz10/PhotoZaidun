@@ -7,9 +7,18 @@ import com.zaidun.photozaidun.data.processor.watermark.WatermarkDrawer
 import com.zaidun.photozaidun.domain.model.*
 import timber.log.Timber
 import java.io.OutputStream
+import androidx.core.graphics.scale
 
 
 class BitmapProcessor(private val context: Context) {
+        private val drawer = WatermarkDrawer()
+    fun clearCache() {
+        cachedLogo?.recycle()
+        cachedLogo = null
+        cachedLogoUri = null
+
+        drawer.clearCache()
+    }
     fun process(
         inputUri: Uri,
         watermarkConfig: WatermarkConfig,
@@ -23,7 +32,10 @@ class BitmapProcessor(private val context: Context) {
 
         var bitmap: Bitmap? = null
         try {
-            bitmap = loadFixedBitmap(inputUri) ?: return
+            bitmap = loadFixedBitmap(
+                inputUri,
+                resizeConfig
+            ) ?: return
 
             // 1. Resize
             val resized = resize(bitmap, resizeConfig)
@@ -48,32 +60,122 @@ class BitmapProcessor(private val context: Context) {
             bitmap?.recycle()
         }
     }
+    private var cachedLogo: Bitmap? = null
+    private var cachedLogoUri: Uri? = null
+    private fun calculateInSampleSize(
+        width: Int,
+        height: Int,
+        resizeConfig: ResizeConfig
+    ): Int {
 
-    private fun loadFixedBitmap(uri: Uri): Bitmap? {
-        val inputStream = context.contentResolver.openInputStream(uri) ?: return null
-        val original = BitmapFactory.decodeStream(inputStream)
-        inputStream.close()
-        val exifStream = context.contentResolver.openInputStream(uri) ?: return original
-        val exif = ExifInterface(exifStream)
-        val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
-        exifStream.close()
-        val matrix = Matrix()
-        when (orientation) {
-            ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
-            ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
-            ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
-            else -> return original
+        val factor = resizeConfig.percentage / 100f
+
+        if (factor >= 1f)
+            return 1
+
+        val targetWidth = (width * factor).toInt()
+        val targetHeight = (height * factor).toInt()
+
+        var sample = 1
+
+        while (
+            width / sample > targetWidth * 2 ||
+            height / sample > targetHeight * 2
+        ) {
+            sample *= 2
         }
-        val rotated = Bitmap.createBitmap(original, 0, 0, original.width, original.height, matrix, true)
-        original.recycle()
+
+        return sample
+    }
+    private fun loadFixedBitmap(
+        uri: Uri,
+        resizeConfig: ResizeConfig
+    ): Bitmap? {
+
+        val resolver = context.contentResolver
+
+        val bounds = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+
+        resolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, bounds)
+        }
+
+        val sampleSize = calculateInSampleSize(
+            bounds.outWidth,
+            bounds.outHeight,
+            resizeConfig
+        )
+
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+            inMutable = true
+        }
+
+        val original = resolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, options)
+        } ?: return null
+        val mutableBitmap =
+            if (original.isMutable)
+                original
+            else
+                original.copy(Bitmap.Config.ARGB_8888, true).also {
+                    original.recycle()
+                }
+
+        val orientation = resolver.openInputStream(uri)?.use {
+            ExifInterface(it).getAttributeInt(
+                ExifInterface.TAG_ORIENTATION,
+                ExifInterface.ORIENTATION_NORMAL
+            )
+        } ?: ExifInterface.ORIENTATION_NORMAL
+
+        val matrix = Matrix()
+
+        when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 ->
+                matrix.postRotate(90f)
+
+            ExifInterface.ORIENTATION_ROTATE_180 ->
+                matrix.postRotate(180f)
+
+            ExifInterface.ORIENTATION_ROTATE_270 ->
+                matrix.postRotate(270f)
+
+            else ->
+                return mutableBitmap
+        }
+
+        val rotated = Bitmap.createBitmap(
+            mutableBitmap,
+            0,
+            0,
+            mutableBitmap.width,
+            mutableBitmap.height,
+            matrix,
+            true
+        )
+
+        if (rotated != mutableBitmap) {
+            mutableBitmap.recycle()
+        }
+
         return rotated
     }
 
     private fun resize(bitmap: Bitmap, config: ResizeConfig): Bitmap {
         val factor = config.percentage / 100f
         if (factor >= 1f) return bitmap
-        return Bitmap.createScaledBitmap(bitmap, (bitmap.width * factor).toInt(), (bitmap.height * factor).toInt(), true)
-    }
+        val width = maxOf(1, (bitmap.width * factor).toInt())
+        val height = maxOf(1, (bitmap.height * factor).toInt())
+
+        if (width == bitmap.width && height == bitmap.height) {
+            return bitmap
+        }
+
+        return bitmap.scale(width, height)  }
     private fun applyTextWatermark(
         bitmap: Bitmap,
         fileName: String,
@@ -89,8 +191,7 @@ class BitmapProcessor(private val context: Context) {
             }
         }
 
-        val result = bitmap.copy(Bitmap.Config.ARGB_8888, true)
-        val canvas = Canvas(result)
+        val canvas = Canvas(bitmap)
 
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             alpha = (config.opacity * 255).toInt()
@@ -120,7 +221,7 @@ class BitmapProcessor(private val context: Context) {
             y -= paint.textSize + 10f
         }
 
-        return result
+        return bitmap
     }
     private fun applyImageWatermark(
         bitmap: Bitmap,
@@ -131,17 +232,34 @@ class BitmapProcessor(private val context: Context) {
 
         val uri = config.imageUri ?: return bitmap
 
-        val input = context.contentResolver.openInputStream(uri)
-            ?: return bitmap
+        val logo = if (
+            cachedLogo != null &&
+            cachedLogoUri == uri &&
+            !cachedLogo!!.isRecycled
+        ) {
+            cachedLogo!!
+        } else {
 
-        val logo = BitmapFactory.decodeStream(input)
-        input.close()
+            cachedLogo?.recycle()
 
-        if (logo == null) {
-            return bitmap
+            context.contentResolver.openInputStream(uri)?.use {
+
+                BitmapFactory.decodeStream(
+                    it,
+                    null,
+                    BitmapFactory.Options().apply {
+                        inPreferredConfig = Bitmap.Config.ARGB_8888
+                    }
+                )
+
+            }?.also {
+
+                cachedLogo = it
+                cachedLogoUri = uri
+
+            } ?: return bitmap
         }
 
-        val drawer = WatermarkDrawer()
 
         val result = drawer.draw(
             bitmap = bitmap,
@@ -161,7 +279,7 @@ class BitmapProcessor(private val context: Context) {
             infoOffsetY = config.infoOffsetY,
             infoSize = config.infoSize
         )
-        logo.recycle()
+
 
         return result
     }

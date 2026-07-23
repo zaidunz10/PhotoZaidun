@@ -2,16 +2,26 @@ package com.zaidun.photozaidun.data.processor.watermark
 
 import android.graphics.*
 import com.zaidun.photozaidun.domain.model.TextPosition
+import androidx.core.graphics.scale
 
 class WatermarkDrawer {
+    private var cachedScaledLogo: Bitmap? = null
+    private var cachedWidth = -1
+    private var cachedHeight = -1
 
     fun createPreview(bitmap: Bitmap, maxSize: Int = 720): Bitmap {
         val ratio = bitmap.width.toFloat() / bitmap.height
         return if (bitmap.width >= bitmap.height) {
-            Bitmap.createScaledBitmap(bitmap, maxSize, (maxSize / ratio).toInt(), true)
+            bitmap.scale(maxSize, (maxSize / ratio).toInt())
         } else {
-            Bitmap.createScaledBitmap(bitmap, (maxSize * ratio).toInt(), maxSize, true)
+            bitmap.scale((maxSize * ratio).toInt(), maxSize)
         }
+    }
+    fun clearCache() {
+        cachedScaledLogo?.recycle()
+        cachedScaledLogo = null
+        cachedWidth = -1
+        cachedHeight = -1
     }
 
     fun draw(
@@ -30,8 +40,8 @@ class WatermarkDrawer {
         infoSize: Float = 0.04f,
         textGap: Float = 12f
     ): Bitmap {
-        val result = bitmap.copy(Bitmap.Config.ARGB_8888, true)
-        val canvas = Canvas(result)
+
+        val canvas = Canvas(bitmap)
         val paint = Paint().apply {
             isAntiAlias = true
             this.alpha = (alpha * 255).toInt()
@@ -39,16 +49,33 @@ class WatermarkDrawer {
 
         // 1. Draw Logo
         watermark?.let { logo ->
-            val targetWidth = (result.width * scale).toInt()
+            val targetWidth = (bitmap.width * scale).toInt()
             val targetHeight = (logo.height.toFloat() / logo.width * targetWidth).toInt()
-            val resizedLogo = Bitmap.createScaledBitmap(logo, targetWidth, targetHeight, true)
+            val resizedLogo =
+                if (
+                    cachedScaledLogo != null &&
+                    cachedWidth == targetWidth &&
+                    cachedHeight == targetHeight &&
+                    !cachedScaledLogo!!.isRecycled
+                ) {
+                    cachedScaledLogo!!
+                } else {
 
+                    cachedScaledLogo?.recycle()
+
+                    logo.scale(targetWidth, targetHeight).also {
+
+                        cachedScaledLogo = it
+                        cachedWidth = targetWidth
+                        cachedHeight = targetHeight
+
+                    }
+                }
             // Posisi berdasarkan persentase (0.0 - 1.0)
-            val x = (result.width - targetWidth) * logoOffsetX
-            val y = (result.height - targetHeight) * logoOffsetY
+            val x = (bitmap.width - targetWidth) * logoOffsetX
+            val y = (bitmap.height - targetHeight) * logoOffsetY
 
             canvas.drawBitmap(resizedLogo, x, y, paint)
-            resizedLogo.recycle()
         }
 
         // 2. Draw Text Block (Nama File & Part)
@@ -63,18 +90,18 @@ class WatermarkDrawer {
                 color = Color.WHITE
                 this.alpha = (alpha * 255).toInt()
                 typeface = Typeface.DEFAULT_BOLD
-                this.textSize = result.width * infoSize
+                this.textSize = bitmap.width * infoSize
                 setShadowLayer(8f, 2f, 2f, Color.BLACK)
             }
 
             val textWidth = textPaint.measureText(text)
             // Posisi teks berdasarkan persentase
-            val tx = (result.width - textWidth) * infoOffsetX
-            val ty = (result.height - textPaint.textSize) * infoOffsetY + textPaint.textSize
+            val tx = (bitmap.width - textWidth) * infoOffsetX
+            val ty = (bitmap.height - textPaint.textSize) * infoOffsetY + textPaint.textSize
 
             canvas.drawText(text, tx, ty, textPaint)
         }
 
-        return result
+        return bitmap
     }
 }

@@ -39,6 +39,9 @@ fun WatermarkSettingsScreen(
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
+    val drawer = remember {
+        WatermarkDrawer()
+    }
 
     // 1. CACHE BITMAP (Kunci Performa Ringan)
     var cachedPreview by remember { mutableStateOf<Bitmap?>(null) }
@@ -60,9 +63,10 @@ fun WatermarkSettingsScreen(
     // Load Preview Bitmap hanya jika URI berubah
     LaunchedEffect(uiState.previewUri) {
         if (uiState.previewUri.isNotBlank()) {
+
             val original = BitmapUtils.loadBitmap(context, Uri.parse(uiState.previewUri))
             // Resize ke 900px agar render preview enteng tapi tetap tajam
-            cachedPreview = WatermarkDrawer().createPreview(original, 900)
+            cachedPreview = drawer.createPreview(original, 900)
         }
     }
 
@@ -76,8 +80,15 @@ fun WatermarkSettingsScreen(
     // RENDER PREVIEW REALTIME (Sangat cepat karena hanya draw, tidak decode)
     LaunchedEffect(cachedPreview, cachedLogo, logoOpacity, logoScale, logoX, logoY, infoX, infoY, infoSize, showFile, showPart) {
         cachedPreview?.let { preview ->
-            renderedPreview = WatermarkDrawer().draw(
-                bitmap = preview,
+
+            val temp = preview.copy(
+                Bitmap.Config.ARGB_8888,
+                true
+            )
+
+            renderedPreview =
+                drawer.draw(
+                bitmap = temp,
                 watermark = cachedLogo,
                 alpha = logoOpacity,
                 scale = logoScale,

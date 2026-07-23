@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import android.content.Intent
 import com.zaidun.photozaidun.data.file.ExportFolderRepository
 import androidx.documentfile.provider.DocumentFile
+import androidx.work.ExistingWorkPolicy
 import androidx.work.WorkInfo
 import com.zaidun.photozaidun.data.auth.GoogleAuthManager
 import com.zaidun.photozaidun.data.drive.DriveServiceFactory
@@ -131,7 +132,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun cancelExport() {
-
+        workManager.cancelUniqueWork("BATCH_EXPORT_TASK")
         workManager.cancelAllWorkByTag("EXPORT")
         workManager.cancelAllWorkByTag("UPLOAD")
 
@@ -342,7 +343,7 @@ class HomeViewModel @Inject constructor(
     fun openGoogleDrive(context: Context) {
         val intent = Intent(Intent.ACTION_VIEW).apply {
             data = Uri.parse("https://drive.google.com")
-            // Memaksa buka aplikasi Drive jika ada
+            // Memaksa buka aplikasi Drive jira ada
             setPackage("com.google.android.apps.docs")
         }
         try {
@@ -354,33 +355,29 @@ class HomeViewModel @Inject constructor(
     }
 
     fun startBatchProcess(accessToken: String) {
-
-        _uiState.update {
-            it.copy(
-                isProcessing = true,
-                progress = 0f,
-                current = 0,
-                total = 0,
-                currentFilename = ""
-            )
+        // PERBAIKAN INDENTASI & GUARD
+        if (_uiState.value.isProcessing) {
+            Timber.tag("EXPORT").d("Proses sedang berjalan, mengabaikan klik ganda.")
+            return
         }
 
-        val inputUri = _uiState.value.selectedFolder
-        if (inputUri.isEmpty()) return
+        Timber.tag("EXPORT").e("========== START BATCH ==========")
+        // ... (update uiState tetap sama) ...
 
         val request = OneTimeWorkRequestBuilder<BatchProcessWorker>()
             .addTag("EXPORT")
-            .setInputData(
-                workDataOf(
-                    "input_folder" to inputUri,
-                    KEY_ACCESS_TOKEN to accessToken
-                )
-            )
+            .setInputData(workDataOf("input_folder" to _uiState.value.selectedFolder, KEY_ACCESS_TOKEN to accessToken))
             .build()
 
         currentWorkId = request.id
         observeCurrentWorker()
-        workManager.enqueue(request)
+
+        // GUNAKAN UNIQUE WORK
+        workManager.enqueueUniqueWork(
+            "BATCH_EXPORT_TASK",
+            ExistingWorkPolicy.KEEP,
+            request
+        )
     }
 }
 

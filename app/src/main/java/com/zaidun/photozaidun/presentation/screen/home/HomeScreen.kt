@@ -374,7 +374,7 @@ fun HomeScreen(
                         scaleX = scale
                         scaleY = scale
                     },
-                enabled = uiState.totalImages > 0,
+                enabled = uiState.totalImages > 0 && !uiState.isProcessing,
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = DeepPurple,

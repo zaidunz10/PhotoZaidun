@@ -9,6 +9,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 @HiltViewModel
@@ -59,6 +60,7 @@ class WatermarkSettingsViewModel @Inject constructor(
 
     fun updateInfoSettings(showFile: Boolean, showPart: Boolean, x: Float, y: Float, size: Float) {
         viewModelScope.launch {
+            Timber.d("UPDATE INFO")
             preferences.saveShowFilename(showFile)
             preferences.saveShowPart(showPart)
             preferences.saveInfoOffset(x, y)
