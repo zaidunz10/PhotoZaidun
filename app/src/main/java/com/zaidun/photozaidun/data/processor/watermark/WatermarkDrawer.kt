@@ -39,7 +39,7 @@ class WatermarkDrawer {
         exifDate: String = "",
         infoOffsetY: Float = 0.05f,
         infoSize: Float = 0.04f,
-        textGap: Float = 12f
+        textGap: Float = 12f // Jarak antar baris
     ): Bitmap {
 
         val canvas = Canvas(bitmap)
@@ -61,48 +61,52 @@ class WatermarkDrawer {
                 ) {
                     cachedScaledLogo!!
                 } else {
-
                     cachedScaledLogo?.recycle()
-
                     logo.scale(targetWidth, targetHeight).also {
-
                         cachedScaledLogo = it
                         cachedWidth = targetWidth
                         cachedHeight = targetHeight
-
                     }
                 }
-            // Posisi berdasarkan persentase (0.0 - 1.0)
             val x = (bitmap.width - targetWidth) * logoOffsetX
             val y = (bitmap.height - targetHeight) * logoOffsetY
-
             canvas.drawBitmap(resizedLogo, x, y, paint)
         }
 
-        // 2. Draw Text Block (Nama File & Part)
-        val text = buildString {
-            if (showFilename) append(fileName.substringBeforeLast('.'))
-            if (showFilename && (showPart || exifDate.isNotBlank())) append("  •  ")
-            if (showPart) append(partName)
-            if (showPart && exifDate.isNotBlank()) append("  •  ")
-            if (exifDate.isNotBlank()) append(exifDate)
+        // 2. Draw Text Block (Dua Baris)
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            this.alpha = (alpha * 255).toInt()
+            typeface = Typeface.DEFAULT_BOLD
+            this.textSize = bitmap.width * infoSize
+            setShadowLayer(8f, 2f, 2f, Color.BLACK)
         }
 
-        if (text.isNotBlank()) {
-            val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.WHITE
-                this.alpha = (alpha * 255).toInt()
-                typeface = Typeface.DEFAULT_BOLD
-                this.textSize = bitmap.width * infoSize
-                setShadowLayer(8f, 2f, 2f, Color.BLACK)
-            }
+        val line1 = buildString {
+            if (showFilename) append(fileName.substringBeforeLast('.'))
+            if (showFilename && showPart) append("  •  ")
+            if (showPart) append(partName)
+        }
+        val line2 = exifDate
 
-            val textWidth = textPaint.measureText(text)
-            // Posisi teks berdasarkan persentase
-            val tx = (bitmap.width - textWidth) * infoOffsetX
-            val ty = (bitmap.height - textPaint.textSize) * infoOffsetY + textPaint.textSize
+        // Hitung posisi Y baris paling bawah (Anchor)
+        var currentY = (bitmap.height - textPaint.textSize) * infoOffsetY + textPaint.textSize
 
-            canvas.drawText(text, tx, ty, textPaint)
+        // Gambar Baris 2 (Tanggal) di paling bawah
+        if (line2.isNotBlank()) {
+            val textWidth2 = textPaint.measureText(line2)
+            val tx2 = (bitmap.width - textWidth2) * infoOffsetX
+            canvas.drawText(line2, tx2, currentY, textPaint)
+
+            // Naikkan posisi Y untuk baris di atasnya (Nama File)
+            currentY -= (textPaint.textSize + textGap)
+        }
+
+        // Gambar Baris 1 (Nama File & Part) di atas tanggal
+        if (line1.isNotBlank()) {
+            val textWidth1 = textPaint.measureText(line1)
+            val tx1 = (bitmap.width - textWidth1) * infoOffsetX
+            canvas.drawText(line1, tx1, currentY, textPaint)
         }
 
         return bitmap

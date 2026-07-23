@@ -18,18 +18,18 @@ class WatermarkSettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     val uiState: StateFlow<WatermarkSettingsUiState> = combine(
-        preferences.watermarkUri,
-        preferences.previewImageUri,
-        preferences.watermarkOpacity,
-        preferences.showTimestamp,
-        preferences.watermarkScale,
-        preferences.showFilename,
-        preferences.showPart,
-        preferences.logoOffsetX,
-        preferences.logoOffsetY,
-        preferences.infoOffsetX,
-        preferences.infoOffsetY,
-        preferences.infoFontSize
+        preferences.watermarkUri,    // 0: String
+        preferences.previewImageUri, // 1: String
+        preferences.watermarkOpacity, // 2: Float
+        preferences.watermarkScale,   // 3: Float
+        preferences.showFilename,     // 4: Boolean
+        preferences.showPart,         // 5: Boolean
+        preferences.showTimestamp,    // 6: Boolean (TAMBAHKAN DI SINI)
+        preferences.logoOffsetX,      // 7: Float
+        preferences.logoOffsetY,      // 8: Float
+        preferences.infoOffsetX,      // 9: Float
+        preferences.infoOffsetY,      // 10: Float
+        preferences.infoFontSize      // 11: Float
     ) { args ->
         WatermarkSettingsUiState(
             watermarkUri = args[0] as String,
@@ -38,12 +38,12 @@ class WatermarkSettingsViewModel @Inject constructor(
             scale = args[3] as Float,
             showFilename = args[4] as Boolean,
             showPart = args[5] as Boolean,
-            showTimestamp = args[7] as Boolean,
-            logoOffsetX = args[8] as Float,
-            logoOffsetY = args[9] as Float,
-            infoOffsetX = args[10] as Float,
-            infoOffsetY = args[11] as Float,
-            infoFontSize = args[12] as Float
+            showTimestamp = args[6] as Boolean, // Sesuai index flow ke-6
+            logoOffsetX = args[7] as Float,
+            logoOffsetY = args[8] as Float,
+            infoOffsetX = args[9] as Float,
+            infoOffsetY = args[10] as Float,
+            infoFontSize = args[11] as Float
         )
     }.stateIn(
         viewModelScope,

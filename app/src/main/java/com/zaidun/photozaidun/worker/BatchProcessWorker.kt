@@ -157,7 +157,6 @@ class BatchProcessWorker @AssistedInject constructor(
                                 resizeConfig = ResizeConfig(percentage = resize),
                                 fileName = outputFileName,
                                 partName = "${partPrefix}$currentPart",
-                                exifDate = "",
                                 compressionConfig = CompressionConfig(quality = quality),
                                 outputStream = outStream,
                                 showTimestamp = wmShowTimestamp

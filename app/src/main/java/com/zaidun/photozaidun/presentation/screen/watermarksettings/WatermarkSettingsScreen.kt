@@ -98,6 +98,7 @@ fun WatermarkSettingsScreen(
                 infoOffsetY = infoY,
                 infoSize = infoSize,
                 showFilename = showFile,
+                    fileName = "IMG_0001.jpg",
                 showPart = showPart, exifDate = if (showTimestamp) "Sabtu, 25 Oktober 2023  14:30" else "", // Dummy date untuk preview fileName = "IMG_0001.jpg",
                 partName = "Part 1"
             )
