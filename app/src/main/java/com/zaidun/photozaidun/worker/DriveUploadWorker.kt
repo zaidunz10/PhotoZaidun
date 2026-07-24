@@ -64,7 +64,6 @@ class DriveUploadWorker @AssistedInject constructor(
 
 
 
-
         // Memerlukan import androidx.documentfile.provider.DocumentFile
         val folder = DocumentFile.fromTreeUri(applicationContext, folderUri) ?: return Result.failure()
 
@@ -113,13 +112,24 @@ class DriveUploadWorker @AssistedInject constructor(
             return when (e.statusCode) {
 
                 401 -> {
+                    Timber.e("Access Token expired di tengah upload")
 
-                    Timber.e("Access Token expired")
-                    showFinalNotification(false, "Sesi Drive habis, silakan coba lagi")
+                    // CEK ULANG DATASTORE: Siapa tahu UI baru saja dapet token baru
+                    val currentTokenInStore = preferences.driveAccessToken.first()
+                    Timber.tag("DriveToken")
+                        .d("Token dipakai = ${token.takeLast(5)}")
+                    Timber.tag("DriveToken")
+                        .d("Token DataStore = ${currentTokenInStore.takeLast(5)}")
 
-
-                    Result.failure()
-
+                    if (currentTokenInStore != token) {
+                        // Jika di gudang sudah ada token baru yang beda dengan yang sedang dipakai worker ini,
+                        // SURUH RETRY. Dia akan mulai lagi dengan token yang baru.
+                        Result.retry()
+                    } else {
+                        // Jika memang di gudang belum ada token baru, baru nyerah (failure)
+                        showFinalNotification(false, "Sesi Drive habis, silakan buka aplikasi")
+                        Result.failure()
+                    }
                 }
 
                 403 -> {

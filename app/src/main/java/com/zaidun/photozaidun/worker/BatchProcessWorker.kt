@@ -14,6 +14,10 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import com.zaidun.photozaidun.data.local.datastore.UserPreferencesDataStore
 import com.zaidun.photozaidun.data.processor.bitmap.BitmapProcessor
 import com.zaidun.photozaidun.domain.model.*
@@ -23,6 +27,8 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.first
 import timber.log.Timber
+import java.util.concurrent.atomic.AtomicInteger
+
 
 @HiltWorker
 class BatchProcessWorker @AssistedInject constructor(
@@ -32,6 +38,16 @@ class BatchProcessWorker @AssistedInject constructor(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
+        val workerStart = System.currentTimeMillis()
+
+        fun logStep(step: String) {
+            Timber.tag("PERF")
+                .d("[$step] +${System.currentTimeMillis() - workerStart} ms")
+        }
+
+        logStep("Worker Started")
+        val semaphore = Semaphore(2)
+
 
         // 1. JADIKAN FOREGROUND SEGERA
         try {
@@ -39,25 +55,45 @@ class BatchProcessWorker @AssistedInject constructor(
         } catch (e: Exception) {
             Timber.e("Gagal setForeground: ${e.message}")
         }
+        logStep("Foreground Ready")
+
+
 
         val accessToken = inputData.getString(KEY_ACCESS_TOKEN) ?: return Result.failure()
+        logStep("Access Token Ready")
 
-        fun enqueueUpload(folder: DocumentFile) {
-            val request = OneTimeWorkRequestBuilder<DriveUploadWorker>()
-                .addTag("UPLOAD")
-                .setInputData(
-                    workDataOf(
-                        KEY_FOLDER_URI to folder.uri.toString(),
-                        KEY_ACCESS_TOKEN to accessToken
+        suspend fun enqueueUpload(folder: DocumentFile) {
+            val freshToken = preferences.driveAccessToken.first()
+            Timber.tag("DriveDebug").d(
+                "Enqueue Upload ${folder.name} token=${freshToken.takeLast(5)}"
+            )
+
+            val tokenPreview =
+                if (freshToken.length > 5) freshToken.takeLast(5) else "EMPTY"
+
+            Timber.tag("DriveDebug")
+                .d("Enqueue Upload ${folder.name} token=$tokenPreview")
+
+            val request =
+                OneTimeWorkRequestBuilder<DriveUploadWorker>()
+                    .addTag("UPLOAD")
+                    .setInputData(
+                        workDataOf(
+                            KEY_FOLDER_URI to folder.uri.toString(),
+                            KEY_ACCESS_TOKEN to freshToken
+                        )
                     )
-                )
-                .build()
-            WorkManager.getInstance(applicationContext).enqueue(request)
+                    .build()
+
+            WorkManager.getInstance(applicationContext)
+                .enqueue(request)
         }
 
         Timber.tag("EXPORT").d("BATCH WORKER START")
         val inputFolderUriStr = inputData.getString("input_folder") ?: return Result.failure()
-        val inputFolder = DocumentFile.fromTreeUri(applicationContext, Uri.parse(inputFolderUriStr)) ?: return Result.failure()
+        val inputFolder = DocumentFile.fromTreeUri(applicationContext, Uri.parse(inputFolderUriStr))
+            ?: return Result.failure()
+        logStep("Input Folder Ready")
 
         // Ambil Pengaturan
         val wmShowTimestamp = preferences.showTimestamp.first()
@@ -81,106 +117,146 @@ class BatchProcessWorker @AssistedInject constructor(
         val wmInfoX = preferences.infoOffsetX.first()
         val wmInfoY = preferences.infoOffsetY.first()
         val wmInfoSize = preferences.infoFontSize.first()
-            val startFrom = preferences.startPartNumber.first()
-
+        val startFrom = preferences.startPartNumber.first()
+        logStep("Preferences Loaded")
         val outputBaseFolder = if (mainFolderName.isBlank()) inputFolder else {
-            inputFolder.findFile(mainFolderName) ?: inputFolder.createDirectory(mainFolderName) ?: inputFolder
+            inputFolder.findFile(mainFolderName) ?: inputFolder.createDirectory(mainFolderName)
+            ?: inputFolder
         }
 
         val processor = BitmapProcessor(applicationContext)
+        val completed = AtomicInteger(0)
         try {
+            val listStart = System.currentTimeMillis()
+            Timber.tag("PERF").d("Mulai membaca isi folder...")
             val imageFiles = inputFolder.listFiles()
                 .filter { it.type?.startsWith("image/") == true }
                 .sortedBy { it.name?.lowercase() }
+            Timber.tag("PERF").d(
+                "listFiles() selesai dalam ${System.currentTimeMillis() - listStart} ms"
+            )
 
-            var photoCount = 0
-            var currentPart = startFrom
-            var currentOutputFolder = outputBaseFolder.findFile("${partPrefix}$currentPart")
-                ?: outputBaseFolder.createDirectory("${partPrefix}$currentPart")
+            logStep("Image List Loaded")
+            // 1. Masuk ke Coroutine Scope agar bisa menggunakan 'async'
+            kotlinx.coroutines.coroutineScope {
 
+                val parts = imageFiles.chunked(maxPhotos)
 
-            imageFiles.forEachIndexed { index, file ->
-                val outputFileName = generateNewName(file.name, suffix)
+                parts.forEachIndexed { partIndex, partFiles ->
+                    if (isStopped) return@coroutineScope
 
-                // LOGIKA RESUME
-                if (currentOutputFolder?.findFile(outputFileName) != null) {
-                    photoCount++
-                    return@forEachIndexed
-                }
+                    val partNumber = startFrom + partIndex
+                    val currentFolderName = "${partPrefix}$partNumber"
+                    val currentOutputFolder = outputBaseFolder.findFile(currentFolderName)
+                        ?: outputBaseFolder.createDirectory(currentFolderName)
 
-                if (isStopped) return Result.failure()
-                setForeground(createForegroundInfo("Memproses $index / ${imageFiles.size}: ${file.name}"))
+                    // Cache daftar file yang sudah ada (biar cepat)
+                    val existingFiles = currentOutputFolder?.listFiles()
+                        ?.mapNotNull { it.name }?.toSet() ?: emptySet()
 
-                try {
-                    if (photoCount >= maxPhotos) {
-                        currentOutputFolder?.let { enqueueUpload(it) }
-                        currentPart++
-                        currentOutputFolder = outputBaseFolder.findFile("${partPrefix}$currentPart")
-                            ?: outputBaseFolder.createDirectory("${partPrefix}$currentPart")
-                        photoCount = 0
-                    }
+                    Timber.tag("EXPORT").d("Memproses Part $partNumber: ${partFiles.size} foto")
 
-                    val outputFile = currentOutputFolder?.createFile(file.type ?: "image/jpeg", outputFileName)
-                    outputFile?.uri?.let { outUri ->
-                        applicationContext.contentResolver.openOutputStream(outUri)?.use { outStream ->
+                    // 2. Jalankan proses paralel di dalam part ini
+                    val deferredJobs = partFiles.mapIndexed { fileIndexInPart, file ->
+                        async {
+                            semaphore.withPermit {
+                                if (isStopped) return@withPermit
 
-                            // DEFINISIKAN WATERMARK CONFIG DI SINI
-                            val watermarkConfig = if (wmUri.isNotBlank()) {
-                                WatermarkConfig(
-                                    type = WatermarkType.IMAGE,
-                                    imageUri = Uri.parse(wmUri),
-                                    opacity = wmOpacity,
-                                    size = wmScale,
-                                    showFilename = wmShowFilename,
-                                    position = WatermarkPosition.valueOf(wmPos),
-                                    showPart = wmShowPart,
-                                    logoOffsetX = wmLogoX,
-                                    logoOffsetY = wmLogoY,
-                                    infoOffsetX = wmInfoX,
-                                    infoOffsetY = wmInfoY,
-                                    infoSize = wmInfoSize
+                                val outputFileName = generateNewName(file.name, suffix)
+
+                                // LOGIKA RESUME: Skip jika file sudah ada
+                                if (outputFileName in existingFiles) {
+                                    return@withPermit
+                                }
+
+                                // Update Notifikasi
+                                val totalIndex = (partIndex * maxPhotos) + fileIndexInPart
+                                setForeground(createForegroundInfo("Memproses $totalIndex / ${imageFiles.size}: ${file.name}"))
+
+                                val outputFile = currentOutputFolder?.createFile(
+                                    file.type ?: "image/jpeg",
+                                    outputFileName
                                 )
-                            } else {
-                                WatermarkConfig(
-                                    type = WatermarkType.TEXT,
-                                    text = wmText,
-                                    opacity = wmOpacity,
-                                    size = wmScale,
-                                    position = WatermarkPosition.valueOf(wmPos),
-                                    showFilename = wmShowFilename
-                                )
+                                outputFile?.uri?.let { outUri ->
+                                    applicationContext.contentResolver.openOutputStream(outUri)?.use { outStream ->
+
+                                        // Buat Watermark Config (Pastikan variabel preferensi sudah ada di atas)
+                                        val watermarkConfig = if (wmUri.isNotBlank()) {
+                                            WatermarkConfig(
+                                                type = WatermarkType.IMAGE,
+                                                imageUri = Uri.parse(wmUri),
+                                                opacity = wmOpacity,
+                                                size = wmScale,
+                                                showFilename = wmShowFilename,
+                                                position = WatermarkPosition.valueOf(wmPos),
+                                                showPart = wmShowPart,
+                                                logoOffsetX = wmLogoX,
+                                                logoOffsetY = wmLogoY,
+                                                infoOffsetX = wmInfoX,
+                                                infoOffsetY = wmInfoY,
+                                                infoSize = wmInfoSize
+                                            )
+                                        } else {
+                                            WatermarkConfig(
+                                                type = WatermarkType.TEXT,
+                                                text = wmText,
+                                                opacity = wmOpacity,
+                                                size = wmScale,
+                                                position = WatermarkPosition.valueOf(wmPos),
+                                                showFilename = wmShowFilename
+                                            )
+                                        }
+
+                                        processor.process(
+                                            inputUri = file.uri,
+                                            watermarkConfig = watermarkConfig,
+                                            resizeConfig = ResizeConfig(percentage = resize),
+                                            fileName = outputFileName,
+                                            partName = currentFolderName,
+                                            compressionConfig = CompressionConfig(quality = quality),
+                                            outputStream = outStream,
+                                            showTimestamp = wmShowTimestamp
+                                        )
+                                        val done = completed.incrementAndGet()
+
+                                        setProgress(
+                                            workDataOf(
+                                                "progress" to (done * 100 / imageFiles.size),
+                                                "current" to done,
+                                                "total" to imageFiles.size,
+                                                "filename" to (file.name ?: "")
+                                            )
+                                        )
+
+                                        setForeground(
+                                            createForegroundInfo(
+                                                "Memproses $done / ${imageFiles.size}"
+                                            )
+                                        )
+                                    }
+                                }
                             }
-
-                            processor.process(
-                                inputUri = file.uri,
-                                watermarkConfig = watermarkConfig,
-                                resizeConfig = ResizeConfig(percentage = resize),
-                                fileName = outputFileName,
-                                partName = "${partPrefix}$currentPart",
-                                compressionConfig = CompressionConfig(quality = quality),
-                                outputStream = outStream,
-                                showTimestamp = wmShowTimestamp
-                            )
-
-                            setProgress(workDataOf(
-                                "progress" to ((index + 1) * 100 / imageFiles.size),
-                                "current" to (index + 1),
-                                "total" to imageFiles.size,
-                                "filename" to (file.name ?: "")
-                            ))
                         }
                     }
-                    photoCount++
-                } catch (e: Exception) {
-                    Timber.e(e, "Gagal memproses file: ${file.name}")
+
+                    // Tunggu semua foto di part ini selesai SEBELUM lanjut ke part berikutnya
+                    deferredJobs.awaitAll()
+
+                    // 3. Setelah 1 Part beres, langsung upload
+                    currentOutputFolder?.let { enqueueUpload(it) }
                 }
-            }
-            currentOutputFolder?.let { enqueueUpload(it) }
+            } // AKHIR coroutineScope (PENTING: Jangan hapus kurung tutup ini)
+
             return Result.success(workDataOf(KEY_OUTPUT_FOLDER to outputBaseFolder.uri.toString()))
+
+        } catch (e: Exception) {
+            Timber.e(e, "Gagal dalam BatchProcessWorker")
+            return Result.failure()
         } finally {
-            processor.clearCache()
+            processor.clearCache() // INI AKAN JALAN APAPUN YANG TERJADI
         }
-    }
+        }
+
 
     private fun generateNewName(originalName: String?, suffix: String): String {
         val name = originalName ?: "image.jpg"

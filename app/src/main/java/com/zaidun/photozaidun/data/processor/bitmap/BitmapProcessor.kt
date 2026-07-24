@@ -144,6 +144,7 @@ class BitmapProcessor(private val context: Context) {
         uri: Uri,
         resizeConfig: ResizeConfig
     ): Bitmap? {
+        // Di loadFixedBitmap (BitmapProcessor.kt)
 
         val resolver = context.contentResolver
 
@@ -163,7 +164,7 @@ class BitmapProcessor(private val context: Context) {
 
         val options = BitmapFactory.Options().apply {
             inSampleSize = sampleSize
-            inPreferredConfig = Bitmap.Config.ARGB_8888
+            inPreferredConfig = Bitmap.Config.RGB_565
             inMutable = true
         }
 
