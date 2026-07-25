@@ -64,9 +64,16 @@ fun WatermarkSettingsScreen(
     LaunchedEffect(uiState.previewUri) {
         if (uiState.previewUri.isNotBlank()) {
 
-            val original = BitmapUtils.loadBitmap(context, Uri.parse(uiState.previewUri))
-            // Resize ke 900px agar render preview enteng tapi tetap tajam
-            cachedPreview = drawer.createPreview(original, 900)
+            val original = BitmapUtils.loadBitmap(
+                context,
+                Uri.parse(uiState.previewUri)
+            )
+
+            if (original != null) {
+                cachedPreview = drawer.createPreview(original, 900)
+            } else {
+                cachedPreview = null
+            }
         }
     }
 
@@ -78,16 +85,11 @@ fun WatermarkSettingsScreen(
     }
 
     // RENDER PREVIEW REALTIME (Sangat cepat karena hanya draw, tidak decode)
-    LaunchedEffect(cachedPreview, cachedLogo, logoOpacity, logoScale, logoX, logoY, infoX, infoY, infoSize, showFile, showPart) {
+    // RENDER PREVIEW REALTIME
+    LaunchedEffect(cachedPreview, cachedLogo, logoOpacity, logoScale, logoX, logoY, infoX, infoY, infoSize, showFile, showPart, showTimestamp) {
         cachedPreview?.let { preview ->
-
-            val temp = preview.copy(
-                Bitmap.Config.ARGB_8888,
-                true
-            )
-
-            renderedPreview =
-                drawer.draw(
+            val temp = preview.copy(Bitmap.Config.ARGB_8888, true)
+            renderedPreview = drawer.draw(
                 bitmap = temp,
                 watermark = cachedLogo,
                 alpha = logoOpacity,
@@ -98,9 +100,11 @@ fun WatermarkSettingsScreen(
                 infoOffsetY = infoY,
                 infoSize = infoSize,
                 showFilename = showFile,
-                    fileName = "IMG_0001.jpg",
-                showPart = showPart, exifDate = if (showTimestamp) "Sabtu, 25 Oktober 2023  14:30" else "", // Dummy date untuk preview fileName = "IMG_0001.jpg",
-                partName = "Part 1"
+                showPart = showPart,
+                fileName = "IMG_0001.jpg",
+                partName = "Part 1",
+                // TAMBAHKAN BARIS INI:
+                exifDate = if (showTimestamp) "Sabtu, 25 Oktober 2023  14:30" else ""
             )
         }
     }
@@ -125,11 +129,14 @@ fun WatermarkSettingsScreen(
                 title = { Text("Watermark Editor", fontWeight = FontWeight.Bold) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) } },
                 actions = {
+                    // Di dalam TopAppBar actions
                     Button(
                         onClick = {
+                            // Kirim semua state lokal ke ViewModel
                             viewModel.updateLogoSettings(logoOpacity, logoScale, logoX, logoY)
                             viewModel.updateInfoSettings(showFile, showPart, infoX, infoY, infoSize)
                             viewModel.updateTimestamp(showTimestamp)
+
                             Toast.makeText(context, "Pengaturan Disimpan", Toast.LENGTH_SHORT).show()
                             onBack()
                         },

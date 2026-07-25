@@ -18,19 +18,19 @@ class WatermarkSettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     val uiState: StateFlow<WatermarkSettingsUiState> = combine(
-        preferences.watermarkUri,    // 0: String
-        preferences.previewImageUri, // 1: String
-        preferences.watermarkOpacity, // 2: Float
-        preferences.watermarkScale,   // 3: Float
-        preferences.showFilename,     // 4: Boolean
-        preferences.showPart,         // 5: Boolean
-        preferences.showTimestamp,    // 6: Boolean (TAMBAHKAN DI SINI)
-        preferences.logoOffsetX,      // 7: Float
-        preferences.logoOffsetY,      // 8: Float
-        preferences.infoOffsetX,      // 9: Float
-        preferences.infoOffsetY,      // 10: Float
-        preferences.infoFontSize      // 11: Float
-    ) { args ->
+        preferences.watermarkUri,    // 0
+        preferences.previewImageUri, // 1
+        preferences.watermarkOpacity, // 2
+        preferences.watermarkScale,   // 3
+        preferences.showFilename,     // 4
+        preferences.showPart,         // 5
+        preferences.showTimestamp,    // 6
+        preferences.logoOffsetX,      // 7
+        preferences.logoOffsetY,      // 8
+        preferences.infoOffsetX,      // 9
+        preferences.infoOffsetY,      // 10
+        preferences.infoFontSize      // 11
+    ) { args: Array<Any?> ->
         WatermarkSettingsUiState(
             watermarkUri = args[0] as String,
             previewUri = args[1] as String,
@@ -38,7 +38,7 @@ class WatermarkSettingsViewModel @Inject constructor(
             scale = args[3] as Float,
             showFilename = args[4] as Boolean,
             showPart = args[5] as Boolean,
-            showTimestamp = args[6] as Boolean, // Sesuai index flow ke-6
+            showTimestamp = args[6] as Boolean,
             logoOffsetX = args[7] as Float,
             logoOffsetY = args[8] as Float,
             infoOffsetX = args[9] as Float,
@@ -53,16 +53,15 @@ class WatermarkSettingsViewModel @Inject constructor(
 
     fun updateLogoSettings(opacity: Float, scale: Float, x: Float, y: Float) {
         viewModelScope.launch {
+            // Simpan secara berurutan agar tidak tabrakan
             preferences.saveWatermarkOpacity(opacity)
             preferences.saveWatermarkScale(scale)
             preferences.saveLogoOffset(x, y)
         }
     }
 
-
-            fun updateInfoSettings(showFile: Boolean, showPart: Boolean, x: Float, y: Float, size: Float) {
+    fun updateInfoSettings(showFile: Boolean, showPart: Boolean, x: Float, y: Float, size: Float) {
         viewModelScope.launch {
-            Timber.d("UPDATE INFO")
             preferences.saveShowFilename(showFile)
             preferences.saveShowPart(showPart)
             preferences.saveInfoOffset(x, y)

@@ -15,33 +15,49 @@ object BitmapUtils {
     fun loadBitmap(
         context: Context,
         uri: Uri
-    ): Bitmap {
+    ): Bitmap? {
 
-        val input = context.contentResolver.openInputStream(uri)
-            ?: throw IllegalArgumentException("Bitmap gagal dibaca")
+        return try {
 
-        val bitmap = BitmapFactory.decodeStream(input)
-        input.close()
+            val input = context.contentResolver.openInputStream(uri)
+                ?: return null
 
-        val rotation = getRotation(context, uri)
+            val bitmap = BitmapFactory.decodeStream(input)
+            input.close()
 
-        if (rotation == 0) return bitmap
+            val rotation = getRotation(context, uri)
 
-        val matrix = Matrix().apply {
-            postRotate(rotation.toFloat())
+            if (rotation == 0) {
+                bitmap
+            } else {
+
+                val matrix = Matrix().apply {
+                    postRotate(rotation.toFloat())
+                }
+
+                Bitmap.createBitmap(
+                    bitmap,
+                    0,
+                    0,
+                    bitmap.width,
+                    bitmap.height,
+                    matrix,
+                    true
+                )
+            }
+
+        } catch (e: SecurityException) {
+
+            Log.e("BitmapUtils", "Tidak memiliki izin membaca URI", e)
+            null
+
+        } catch (e: Exception) {
+
+            Log.e("BitmapUtils", "Gagal memuat bitmap", e)
+            null
+
         }
-
-        return Bitmap.createBitmap(
-            bitmap,
-            0,
-            0,
-            bitmap.width,
-            bitmap.height,
-            matrix,
-            true
-        )
     }
-
     private fun getRotation(
         context: Context,
         uri: Uri
