@@ -120,8 +120,6 @@ fun ExportLoadingScreen(
 
                     viewModel.cancelExport()
 
-                    navController.popBackStack()
-
                 }
             ) {
                 Text("Cancel")
