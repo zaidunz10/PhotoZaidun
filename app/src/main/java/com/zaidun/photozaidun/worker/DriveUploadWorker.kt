@@ -3,7 +3,9 @@ package com.zaidun.photozaidun.worker
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.pm.ServiceInfo
 import android.net.Uri
+import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.work.ForegroundInfo
@@ -88,80 +90,87 @@ class DriveUploadWorker @AssistedInject constructor(
 
             Timber.d("Memulai upload folder ke Google Drive: ${folder.name}")
 
+            Timber.d("Memulai upload folder ke Google Drive: ${folder.name}")
+
             val filesToUpload = folder.listFiles().filter { it.type?.startsWith("image/") == true }
             val totalFiles = filesToUpload.size
+
+            // Pastikan loop forEachIndexed membungkus logika update notifikasi
             filesToUpload.forEachIndexed { index, document ->
-                val progressText = "Mengunggah ${index + 1}/$totalFiles foto: ${document.name}"
-                setForeground(createForegroundInfo(progressText))
+
+                if (index % 5 == 0 || index == totalFiles - 1) {
+                    val progressText = "Mengunggah ${index + 1}/$totalFiles foto"
+
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                            setForeground(
+                                ForegroundInfo(
+                                    NOTIFICATION_ID,
+                                    createForegroundInfo(progressText).notification,
+                                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                                )
+                            )
+                        } else {
+                            setForeground(createForegroundInfo(progressText))
+                        }
+                    } catch (e: Exception) {
+                        Timber.e(e)
+                    }
+                }
 
                 val tempFile = document.copyToCache(applicationContext)
+
                 try {
                     repository.uploadFile(drive, tempFile, partFolderId)
                 } finally {
                     tempFile.delete()
                 }
             }
-            showFinalNotification(
-                true,
-                "$totalFiles foto selesai di upload"
-            )
 
+            showFinalNotification(true, "Upload selesai")
             Result.success()
+
         } catch (e: GoogleJsonResponseException) {
 
-            return when (e.statusCode) {
+            when (e.statusCode) {
 
                 401 -> {
+
                     Timber.e("Access Token expired di tengah upload")
 
-                    // CEK ULANG DATASTORE: Siapa tahu UI baru saja dapet token baru
-                    val currentTokenInStore = preferences.driveAccessToken.first()
-                    Timber.tag("DriveToken")
-                        .d("Token dipakai = ${token.takeLast(5)}")
-                    Timber.tag("DriveToken")
-                        .d("Token DataStore = ${currentTokenInStore.takeLast(5)}")
+                    val currentToken = preferences.driveAccessToken.first()
 
-                    if (currentTokenInStore != token) {
-                        // Jika di gudang sudah ada token baru yang beda dengan yang sedang dipakai worker ini,
-                        // SURUH RETRY. Dia akan mulai lagi dengan token yang baru.
+                    Timber.tag("DriveToken")
+                        .d("Worker Token = ${token.takeLast(5)}")
+
+                    Timber.tag("DriveToken")
+                        .d("DataStore Token = ${currentToken.takeLast(5)}")
+
+                    if (currentToken != token) {
                         Result.retry()
                     } else {
-                        // Jika memang di gudang belum ada token baru, baru nyerah (failure)
-                        showFinalNotification(false, "Sesi Drive habis, silakan buka aplikasi")
+                        showFinalNotification(false, "Token Google Drive sudah kedaluwarsa")
                         Result.failure()
                     }
                 }
 
                 403 -> {
-
-                    Timber.e("Permission denied")
-
-                    showFinalNotification(
-                        false,
-                        "Google Drive permission denied"
-                    )
-
+                    showFinalNotification(false, "Permission denied")
                     Result.failure()
-
                 }
 
                 404 -> {
-
-                    Timber.e("Folder tidak ditemukan")
-
-                    showFinalNotification(
-                        false,
-                        "Folder Drive tidak ditemukan"
-                    )
-
+                    showFinalNotification(false, "Folder tidak ditemukan")
                     Result.failure()
-
                 }
 
                 else -> Result.retry()
-
             }
 
+        } catch (e: Exception) {
+
+            Timber.e(e)
+            Result.retry()
         }
     }
     private fun createForegroundInfo(progress: String): ForegroundInfo {
@@ -173,7 +182,18 @@ class DriveUploadWorker @AssistedInject constructor(
             .setOngoing(true)
             .build()
 
-        return ForegroundInfo(NOTIFICATION_ID, notification)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ForegroundInfo(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
+        } else {
+            ForegroundInfo(
+                NOTIFICATION_ID,
+                notification
+            )
+        }
     }
 
     private fun createNotificationChannel() {

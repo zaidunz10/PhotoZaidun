@@ -50,24 +50,19 @@ fun ExportLoadingScreen(
     BackHandler(true) {
         // Disable back
     }
-    var started by remember {
-        mutableStateOf(false)
-    }
-    LaunchedEffect(uiState.isProcessing) {
+    var started by remember { mutableStateOf(false) }
 
+    LaunchedEffect(uiState.isProcessing) {
         Timber.tag("EXPORT_SCREEN").d("ExportLoadingScreen terbuka")
 
         if (uiState.isProcessing) {
-
             started = true
-
         }
+
         if (started && !uiState.isProcessing) {
             navController.popBackStack()
         }
-
     }
-
     Surface(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -121,17 +116,15 @@ fun ExportLoadingScreen(
             Spacer(Modifier.height(40.dp))
 
             Button(
-
                 onClick = {
 
                     viewModel.cancelExport()
 
+                    navController.popBackStack()
+
                 }
-
             ) {
-
                 Text("Cancel")
-
             }
 
         }

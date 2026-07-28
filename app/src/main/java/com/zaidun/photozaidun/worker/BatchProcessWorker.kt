@@ -3,6 +3,7 @@ package com.zaidun.photozaidun.worker
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
@@ -28,52 +29,38 @@ import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.first
 import timber.log.Timber
 import java.util.concurrent.atomic.AtomicInteger
-
-
 @HiltWorker
 class BatchProcessWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted params: WorkerParameters,
     private val preferences: UserPreferencesDataStore
 ) : CoroutineWorker(context, params) {
-
     override suspend fun doWork(): Result {
+        Timber.tag("WORKER").d("Worker ID = $id")
         val workerStart = System.currentTimeMillis()
-
         fun logStep(step: String) {
             Timber.tag("PERF")
                 .d("[$step] +${System.currentTimeMillis() - workerStart} ms")
         }
-
         logStep("Worker Started")
         val semaphore = Semaphore(2)
-
-
-        // 1. JADIKAN FOREGROUND SEGERA
         try {
             setForeground(createForegroundInfo("Menyiapkan pemrosesan..."))
         } catch (e: Exception) {
             Timber.e("Gagal setForeground: ${e.message}")
         }
         logStep("Foreground Ready")
-
-
-
         val accessToken = inputData.getString(KEY_ACCESS_TOKEN) ?: return Result.failure()
         logStep("Access Token Ready")
-
         suspend fun enqueueUpload(folder: DocumentFile) {
             val freshToken = preferences.driveAccessToken.first()
             Timber.tag("DriveDebug").d(
                 "Enqueue Upload ${folder.name} token=${freshToken.takeLast(5)}"
             )
-
             val tokenPreview =
                 if (freshToken.length > 5) freshToken.takeLast(5) else "EMPTY"
-
             Timber.tag("DriveDebug")
                 .d("Enqueue Upload ${folder.name} token=$tokenPreview")
-
             val request =
                 OneTimeWorkRequestBuilder<DriveUploadWorker>()
                     .addTag("UPLOAD")
@@ -84,18 +71,14 @@ class BatchProcessWorker @AssistedInject constructor(
                         )
                     )
                     .build()
-
             WorkManager.getInstance(applicationContext)
                 .enqueue(request)
         }
-
         Timber.tag("EXPORT").d("BATCH WORKER START")
         val inputFolderUriStr = inputData.getString("input_folder") ?: return Result.failure()
         val inputFolder = DocumentFile.fromTreeUri(applicationContext, Uri.parse(inputFolderUriStr))
             ?: return Result.failure()
         logStep("Input Folder Ready")
-
-        // Ambil Pengaturan
         val wmShowTimestamp = preferences.showTimestamp.first()
         val mainFolderName = preferences.mainFolder.first()
         val partPrefix = preferences.partFolder.first()
@@ -103,8 +86,6 @@ class BatchProcessWorker @AssistedInject constructor(
         val suffix = preferences.fileSuffix.first()
         val resize = preferences.resizePercent.first()
         val quality = preferences.jpegQuality.first()
-
-        // Preferensi Watermark
         val wmUri = preferences.watermarkUri.first()
         val wmOpacity = preferences.watermarkOpacity.first()
         val wmScale = preferences.watermarkScale.first()
@@ -123,7 +104,6 @@ class BatchProcessWorker @AssistedInject constructor(
             inputFolder.findFile(mainFolderName) ?: inputFolder.createDirectory(mainFolderName)
             ?: inputFolder
         }
-
         val processor = BitmapProcessor(applicationContext)
         val completed = AtomicInteger(0)
         try {
@@ -135,129 +115,119 @@ class BatchProcessWorker @AssistedInject constructor(
             Timber.tag("PERF").d(
                 "listFiles() selesai dalam ${System.currentTimeMillis() - listStart} ms"
             )
-
             logStep("Image List Loaded")
-            // 1. Masuk ke Coroutine Scope agar bisa menggunakan 'async'
             kotlinx.coroutines.coroutineScope {
-
                 val parts = imageFiles.chunked(maxPhotos)
-
                 parts.forEachIndexed { partIndex, partFiles ->
                     if (isStopped) return@coroutineScope
-
                     val partNumber = startFrom + partIndex
                     val currentFolderName = "${partPrefix}$partNumber"
                     val currentOutputFolder = outputBaseFolder.findFile(currentFolderName)
                         ?: outputBaseFolder.createDirectory(currentFolderName)
-
-                    // Cache daftar file yang sudah ada (biar cepat)
                     val existingFiles = currentOutputFolder?.listFiles()
                         ?.mapNotNull { it.name }?.toSet() ?: emptySet()
-
                     Timber.tag("EXPORT").d("Memproses Part $partNumber: ${partFiles.size} foto")
-
-                    // 2. Jalankan proses paralel di dalam part ini
                     val deferredJobs = partFiles.mapIndexed { fileIndexInPart, file ->
                         async {
                             semaphore.withPermit {
                                 if (isStopped) return@withPermit
-
                                 val outputFileName = generateNewName(file.name, suffix)
-
-                                // LOGIKA RESUME: Skip jika file sudah ada
                                 if (outputFileName in existingFiles) {
                                     return@withPermit
                                 }
-
-                                // Update Notifikasi
-                                val totalIndex = (partIndex * maxPhotos) + fileIndexInPart
-                                setForeground(createForegroundInfo("Memproses $totalIndex / ${imageFiles.size}: ${file.name}"))
-
                                 val outputFile = currentOutputFolder?.createFile(
                                     file.type ?: "image/jpeg",
                                     outputFileName
                                 )
                                 outputFile?.uri?.let { outUri ->
-                                    applicationContext.contentResolver.openOutputStream(outUri)?.use { outStream ->
+                                    applicationContext.contentResolver.openOutputStream(outUri)
+                                        ?.use { outStream ->
+                                            val watermarkConfig = if (wmUri.isNotBlank()) {
+                                                WatermarkConfig(
+                                                    type = WatermarkType.IMAGE,
+                                                    imageUri = Uri.parse(wmUri),
+                                                    opacity = wmOpacity,
+                                                    size = wmScale,
+                                                    showFilename = wmShowFilename,
+                                                    position = WatermarkPosition.valueOf(wmPos),
+                                                    showPart = wmShowPart,
+                                                    logoOffsetX = wmLogoX,
+                                                    logoOffsetY = wmLogoY,
+                                                    infoOffsetX = wmInfoX,
+                                                    infoOffsetY = wmInfoY,
+                                                    infoSize = wmInfoSize
+                                                )
+                                            } else {
+                                                WatermarkConfig(
+                                                    type = WatermarkType.TEXT,
+                                                    text = wmText,
+                                                    opacity = wmOpacity,
+                                                    size = wmScale,
+                                                    position = WatermarkPosition.valueOf(wmPos),
+                                                    showFilename = wmShowFilename
+                                                )
+                                            }
+                                            processor.process(
+                                                inputUri = file.uri,
+                                                watermarkConfig = watermarkConfig,
+                                                resizeConfig = ResizeConfig(percentage = resize),
+                                                fileName = outputFileName,
+                                                partName = currentFolderName,
+                                                compressionConfig = CompressionConfig(quality = quality),
+                                                outputStream = outStream,
+                                                showTimestamp = wmShowTimestamp
+                                            )
+                                            val done = completed.incrementAndGet()
+                                            if (done % 10 == 0 || done == imageFiles.size) {
+                                                Timber.tag("EXPORT_PROGRESS").d(
+                                                    "done=$done total=${imageFiles.size}"
+                                                )
+                                                setProgress(
+                                                    workDataOf(
+                                                        "progress" to (done * 100 / imageFiles.size),
+                                                        "current" to done,
+                                                        "total" to imageFiles.size,
+                                                        "filename" to (file.name ?: "")
+                                                    )
+                                                )
+                                                    Timber.tag("EXPORT_PROGRESS").d("Progress berhasil dikirim")
 
-                                        // Buat Watermark Config (Pastikan variabel preferensi sudah ada di atas)
-                                        val watermarkConfig = if (wmUri.isNotBlank()) {
-                                            WatermarkConfig(
-                                                type = WatermarkType.IMAGE,
-                                                imageUri = Uri.parse(wmUri),
-                                                opacity = wmOpacity,
-                                                size = wmScale,
-                                                showFilename = wmShowFilename,
-                                                position = WatermarkPosition.valueOf(wmPos),
-                                                showPart = wmShowPart,
-                                                logoOffsetX = wmLogoX,
-                                                logoOffsetY = wmLogoY,
-                                                infoOffsetX = wmInfoX,
-                                                infoOffsetY = wmInfoY,
-                                                infoSize = wmInfoSize
-                                            )
-                                        } else {
-                                            WatermarkConfig(
-                                                type = WatermarkType.TEXT,
-                                                text = wmText,
-                                                opacity = wmOpacity,
-                                                size = wmScale,
-                                                position = WatermarkPosition.valueOf(wmPos),
-                                                showFilename = wmShowFilename
-                                            )
+                                                try {
+                                                    val msg =
+                                                        "Mengekspor $done / ${imageFiles.size} foto"
+                                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                                                        setForeground(
+                                                            ForegroundInfo(
+                                                                102,
+                                                                createForegroundInfo(msg).notification,
+                                                                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                                                            )
+                                                        )
+                                                    } else {
+                                                        setForeground(createForegroundInfo(msg))
+                                                    }
+                                                } catch (e: Exception) {
+                                                    Timber.e("Gagal update notif: ${e.message}")
+                                                }
+                                            }
                                         }
-
-                                        processor.process(
-                                            inputUri = file.uri,
-                                            watermarkConfig = watermarkConfig,
-                                            resizeConfig = ResizeConfig(percentage = resize),
-                                            fileName = outputFileName,
-                                            partName = currentFolderName,
-                                            compressionConfig = CompressionConfig(quality = quality),
-                                            outputStream = outStream,
-                                            showTimestamp = wmShowTimestamp
-                                        )
-                                        val done = completed.incrementAndGet()
-
-                                        setProgress(
-                                            workDataOf(
-                                                "progress" to (done * 100 / imageFiles.size),
-                                                "current" to done,
-                                                "total" to imageFiles.size,
-                                                "filename" to (file.name ?: "")
-                                            )
-                                        )
-
-                                        setForeground(
-                                            createForegroundInfo(
-                                                "Memproses $done / ${imageFiles.size}"
-                                            )
-                                        )
-                                    }
                                 }
                             }
                         }
                     }
 
-                    // Tunggu semua foto di part ini selesai SEBELUM lanjut ke part berikutnya
                     deferredJobs.awaitAll()
-
-                    // 3. Setelah 1 Part beres, langsung upload
                     currentOutputFolder?.let { enqueueUpload(it) }
                 }
-            } // AKHIR coroutineScope (PENTING: Jangan hapus kurung tutup ini)
-
+            }
             return Result.success(workDataOf(KEY_OUTPUT_FOLDER to outputBaseFolder.uri.toString()))
-
         } catch (e: Exception) {
             Timber.e(e, "Gagal dalam BatchProcessWorker")
             return Result.failure()
         } finally {
-            processor.clearCache() // INI AKAN JALAN APAPUN YANG TERJADI
+            processor.clearCache()
         }
-        }
-
-
+    }
     private fun generateNewName(originalName: String?, suffix: String): String {
         val name = originalName ?: "image.jpg"
         val dotIndex = name.lastIndexOf('.')
@@ -269,13 +239,18 @@ class BatchProcessWorker @AssistedInject constructor(
             if (suffix.isBlank()) name else "${name}_$suffix"
         }
     }
-
     private fun createForegroundInfo(message: String): ForegroundInfo {
         val channelId = "batch_export_channel"
-        val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        val notificationManager =
+            applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(channelId, "Batch Export", NotificationManager.IMPORTANCE_LOW)
+            val channel = NotificationChannel(
+                channelId,
+                "Batch Export",
+                NotificationManager.IMPORTANCE_LOW
+            )
             notificationManager.createNotificationChannel(channel)
         }
 
@@ -286,6 +261,17 @@ class BatchProcessWorker @AssistedInject constructor(
             .setOngoing(true)
             .build()
 
-        return ForegroundInfo(102, notification)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ForegroundInfo(
+                102,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
+        } else {
+            ForegroundInfo(
+                102,
+                notification
+            )
+        }
     }
 }

@@ -56,12 +56,12 @@ class HomeViewModel @Inject constructor(
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
     private fun observeCurrentWorker() {
 
-
         val id = currentWorkId ?: return
 
         workManager
             .getWorkInfoByIdLiveData(id)
             .observeForever { work ->
+        Timber.tag("OBSERVE").d("Observe ID = $id")
                 Timber.d("OBSERVER MASUK")
 
                 if (work == null) return@observeForever
@@ -132,10 +132,20 @@ class HomeViewModel @Inject constructor(
     }
 
     fun cancelExport() {
+
         workManager.cancelUniqueWork("BATCH_EXPORT_TASK")
         workManager.cancelAllWorkByTag("EXPORT")
         workManager.cancelAllWorkByTag("UPLOAD")
 
+        _uiState.update {
+            it.copy(
+                isProcessing = false,
+                progress = 0f,
+                current = 0,
+                total = 0,
+                currentFilename = ""
+            )
+        }
     }
 
     fun clearDriveConsent() {

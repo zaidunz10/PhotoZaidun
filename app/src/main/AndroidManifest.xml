@@ -5,7 +5,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
+    <!-- Pastikan Service WorkManager dideklarasikan dengan tipe (Jika menggunakan custom) -->
+    <!-- Jika standar, cukup tambahkan permission di atas -->
     <application
         android:name=".PhotoZaidunApp"
         android:allowBackup="true"
