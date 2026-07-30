@@ -9,9 +9,8 @@ data class SettingsUiState(
     val driveConnected: Boolean = false,
 
     val rootFolder: String = "Photo Zaidun",
-    val mainFolder: String = "Customer",
     val partFolder: String = "part",
-
+    val folderLevels: List<FolderLevel> = emptyList(),
     val fileSuffix: String = "",
     val startPartNumber: Int = 1,
 
@@ -22,4 +21,8 @@ data class SettingsUiState(
     val showFilename: Boolean = false,
     val autoUpload: Boolean = false
 
+)
+data class FolderLevel(
+    val id: Long = System.currentTimeMillis(),
+    val name: String = ""
 )

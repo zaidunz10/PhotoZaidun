@@ -17,7 +17,64 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     private val preferences: UserPreferencesDataStore,
     private val googleAuthManager: GoogleAuthManager
+
 ) : ViewModel() {
+    private fun saveFolderLevels() {
+
+        viewModelScope.launch {
+
+            preferences.saveFolderLevels(
+                _uiState.value.folderLevels
+            )
+
+        }
+
+    }
+    fun removeFolderLevel(id: Long) {
+
+        _uiState.update { state ->
+
+            state.copy(
+                folderLevels =
+                    state.folderLevels.filterNot {
+                        it.id == id
+                    }
+            )
+
+        }
+
+        saveFolderLevels()
+    }
+    fun updateFolderLevel(
+        id: Long,
+        name: String
+    ) {
+        _uiState.update { state ->
+            state.copy(
+                folderLevels =
+                    state.folderLevels.map {
+
+                        if (it.id == id)
+                            it.copy(name = name)
+
+                        else
+                            it
+                    }
+            )
+        }
+
+        saveFolderLevels()
+    }
+    fun addFolderLevel() {
+        _uiState.update {
+            it.copy(
+                folderLevels = it.folderLevels + FolderLevel()
+            )
+        }
+
+        saveFolderLevels()
+    }
+
     fun saveAutoUpload(value: Boolean) {
         _uiState.update {
             it.copy(autoUpload = value)
@@ -39,7 +96,7 @@ class SettingsViewModel @Inject constructor(
                 preferences.userName,
                 preferences.userEmail,
                 preferences.rootFolder,
-                preferences.mainFolder,
+                preferences.folderLevels,
                 preferences.partFolder,
                 preferences.fileSuffix,
                 preferences.resizePercent,
@@ -52,7 +109,7 @@ class SettingsViewModel @Inject constructor(
                 val name = args[1] as String
                 val email = args[2] as String
                 val root = args[3] as String
-                val main = args[4] as String
+                val folderLevels = args[4] as List<*>
                 val part = args[5] as String
                 val suffix = args[6] as String
                 val resize = args[7] as Int
@@ -68,7 +125,7 @@ class SettingsViewModel @Inject constructor(
                         googleUser = user,
                         driveConnected = token.isNotBlank(),
                         rootFolder = root,
-                        mainFolder = main,
+                        folderLevels = folderLevels.filterIsInstance<FolderLevel>(),
                         partFolder = part,
                         fileSuffix = suffix,
                         resizePercent = resize.toString(),
@@ -124,7 +181,6 @@ class SettingsViewModel @Inject constructor(
 
     // Fungsi Save Responsif (Update UI Langsung + Simpan DB)
     fun saveRootFolder(v: String) { _uiState.update { it.copy(rootFolder = v) }; viewModelScope.launch { preferences.saveRootFolder(v) } }
-    fun saveMainFolder(v: String) { _uiState.update { it.copy(mainFolder = v) }; viewModelScope.launch { preferences.saveMainFolder(v) } }
     fun savePartFolder(v: String) { _uiState.update { it.copy(partFolder = v) }; viewModelScope.launch { preferences.savePartFolder(v) } }
     fun saveFileSuffix(v: String) { _uiState.update { it.copy(fileSuffix = v) }; viewModelScope.launch { preferences.saveFileSuffix(v) } }
     fun saveStartPart(v: Int) {

@@ -43,6 +43,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.lazy.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -277,17 +279,88 @@ fun SettingsScreen(
                     fieldLabel = "Nama Induk Folder",
                     initiallyExpanded = true
                 )
+
             }
+
 
             item {
                 Spacer(Modifier.height(10.dp))
-                ExpandableFolderField(
-                    icon = Icons.Default.CreateNewFolder,
-                    label = "Folder Project (Level 2)",
-                    value = uiState.mainFolder,
-                    onValueChange = { viewModel.saveMainFolder(it) },
-                    fieldLabel = "Nama Folder Project"
-                )
+                uiState.folderLevels.forEachIndexed { index, folder ->
+
+                    ExpandableFolderField(
+
+                        icon = Icons.Default.CreateNewFolder,
+
+                        label = "Sub Folder ${index + 1}",
+
+                        value = folder.name,
+
+                        onValueChange = {
+                            viewModel.updateFolderLevel(
+                                folder.id,
+                                it
+                            )
+                        },
+
+                        fieldLabel = "Nama Folder",
+
+                        placeholder = "Contoh : Touring"
+
+                    )
+
+                    Spacer(
+                        Modifier.height(8.dp)
+                    )
+
+                    TextButton(
+
+                        onClick = {
+                            viewModel.removeFolderLevel(folder.id)
+                        }
+
+                    ) {
+
+                        Icon(
+                            Icons.Default.Delete,
+                            null
+                        )
+
+                        Spacer(
+                            Modifier.width(6.dp)
+                        )
+
+                        Text("Hapus")
+
+                    }
+
+                    HorizontalDivider()
+
+                }
+                Button(
+
+                    onClick = {
+
+                        viewModel.addFolderLevel()
+
+                    },
+
+                    modifier = Modifier.fillMaxWidth()
+
+                ) {
+
+                    Icon(
+                        Icons.Default.Add,
+                        null
+                    )
+
+                    Spacer(
+                        Modifier.width(8.dp)
+                    )
+
+                    Text("Tambah Sub Folder")
+
+                }
+
             }
 
             item {
@@ -401,9 +474,32 @@ fun SettingsScreen(
                             } else {
                                 "IMG_01_${uiState.fileSuffix}.jpg"
                             }
+                        val previewPath =
+                            buildString {
+
+                                append("My Drive")
+                                append(" / ")
+                                append(uiState.rootFolder)
+
+                                uiState.folderLevels.forEach {
+
+                                    if (it.name.isNotBlank()) {
+                                        append(" / ")
+                                        append(it.name)
+                                    }
+
+                                }
+
+                                append(" / ")
+                                append(uiState.partFolder)
+                                append("1")
+                                append(" / ")
+                                append(previewFile)
+
+                            }
 
                         Text(
-                            "My Drive / ${uiState.rootFolder} / ${uiState.mainFolder} / ${uiState.partFolder}1 / $previewFile",
+                            previewPath,
                             style = MaterialTheme.typography.bodySmall,
                             color = SubtleGray
                         )

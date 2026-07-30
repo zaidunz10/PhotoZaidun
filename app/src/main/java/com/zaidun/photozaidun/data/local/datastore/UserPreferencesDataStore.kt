@@ -1,12 +1,14 @@
 package com.zaidun.photozaidun.data.local.datastore
 
 import android.content.Context
-import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import com.zaidun.photozaidun.presentation.screen.settings.FolderLevel
 import androidx.datastore.preferences.preferencesDataStore
 import com.zaidun.photozaidun.data.auth.GoogleUser
 import kotlinx.coroutines.flow.Flow
@@ -19,6 +21,7 @@ private val Context.dataStore by preferencesDataStore("photozaidun_pref")
 
 class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
 ) {
+    private val gson = Gson()
 
     companion object {
         // Pindahkan semua kunci ke companion object
@@ -27,8 +30,8 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
         private val USER_NAME_KEY = stringPreferencesKey("user_name")
         private val USER_EMAIL_KEY = stringPreferencesKey("user_email")
         private val START_PART_NUMBER = intPreferencesKey("start_part_number")
+        private val FOLDER_LEVELS = stringPreferencesKey("folder_levels")
         private val ROOT_FOLDER = stringPreferencesKey("root_folder")
-        private val MAIN_FOLDER = stringPreferencesKey("main_folder")
         private val PART_FOLDER = stringPreferencesKey("part_folder")
         private val FILE_SUFFIX = stringPreferencesKey("file_suffix")
         private val FOLDER_DISPLAY_NAME = stringPreferencesKey("folder_display_name")
@@ -59,10 +62,60 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
     val userId: Flow<String> = context.dataStore.data.map { it[USER_ID_KEY] ?: "" }
     val userName: Flow<String> = context.dataStore.data.map { it[USER_NAME_KEY] ?: "" }
     val userEmail: Flow<String> = context.dataStore.data.map { it[USER_EMAIL_KEY] ?: "" }
+    val folderLevels: Flow<List<FolderLevel>> =
+        context.dataStore.data.map { preferences ->
+
+            val json =
+                preferences[FOLDER_LEVELS]
+
+            if (json.isNullOrBlank()) {
+
+                emptyList()
+
+            } else {
+
+                try {
+
+                    val type =
+                        object : TypeToken<List<FolderLevel>>() {}.type
+
+                    gson.fromJson(json, type)
+
+                } catch (e: Exception) {
+
+                    emptyList()
+
+                }
+
+            }
+
+        }
+    suspend fun saveFolderLevels(
+        folders: List<FolderLevel>
+    ) {
+
+        context.dataStore.edit {
+
+            it[FOLDER_LEVELS] =
+                gson.toJson(folders)
+
+        }
+
+    }
+    suspend fun clearFolderLevels() {
+
+        context.dataStore.edit {
+
+            it.remove(FOLDER_LEVELS)
+
+        }
+
+    }
     val folderDisplayName =
         context.dataStore.data.map {
             it[FOLDER_DISPLAY_NAME] ?: ""
         }
+
     val showTimestamp: Flow<Boolean> = context.dataStore.data.map { it[SHOW_TIMESTAMP] ?: true }
 
     val driveAccessToken: Flow<String> =
@@ -104,9 +157,7 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
             it.remove(USER_EMAIL_KEY)
         }
     }
-    suspend fun saveMainFolder(value: String) {
-        context.dataStore.edit { it[MAIN_FOLDER] = value }
-    }
+
     suspend fun saveRootFolder(value: String) { context.dataStore.edit { it[ROOT_FOLDER] = value } }
     suspend fun savePartFolder(value: String) {
         context.dataStore.edit { it[PART_FOLDER] = value }
@@ -210,7 +261,6 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
     val previewImageUri: Flow<String> = context.dataStore.data.map { it[PREVIEW_IMAGE_URI] ?: "" }
     val watermarkUri: Flow<String> = context.dataStore.data.map { it[WATERMARK_URI] ?: "" }
     val watermarkScale: Flow<Float> = context.dataStore.data.map { it[WATERMARK_SCALE] ?: 1.0f }
-    val mainFolder: Flow<String> = context.dataStore.data.map { it[MAIN_FOLDER] ?: "" }
     val partFolder: Flow<String> = context.dataStore.data.map { it[PART_FOLDER] ?: "" }
     val fileSuffix: Flow<String> = context.dataStore.data.map { it[FILE_SUFFIX] ?: "" }
     val maxPhotoPerFolder: Flow<Int> = context.dataStore.data.map { it[MAX_PHOTO_PER_FOLDER] ?: 200 }

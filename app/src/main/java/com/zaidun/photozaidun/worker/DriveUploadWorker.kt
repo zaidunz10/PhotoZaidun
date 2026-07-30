@@ -72,18 +72,35 @@ class DriveUploadWorker @AssistedInject constructor(
         return try {
             // AMBIL INPUT USER DARI DATASTORE
             val rootName = preferences.rootFolder.first().ifBlank { "My Photo App" }
-            val mainName = preferences.mainFolder.first().ifBlank { "Uncategorized" }
-
+            val folderLevels =
+                preferences.folderLevels.first()
             // LEVEL 1: Folder paling atas (sesuai input user)
             val rootId = repository.getOrCreateFolder(drive, rootName)
 
-            // LEVEL 2: Folder di dalamnya (misal: "Sunmori" atau "Kamar")
-            val mainId = repository.getOrCreateFolder(drive, mainName, rootId)
+            var uploadParentId = rootId
+
+            folderLevels
+                .map { it.name.trim() }
+                .filter { it.isNotBlank() }
+                .forEach { folderName ->
+
+                    uploadParentId =
+                        repository.getOrCreateFolder(
+                            drive,
+                            folderName,
+                            uploadParentId
+                        )
+
+                }
 
             // LEVEL 3: Folder Part (part_1, part_2, dst)
             // folder.name adalah nama folder lokal yang sudah mengandung prefix (misal: "bagian_1")
-            val partFolderId = repository.getOrCreateFolder(drive, folder.name ?: "part_1", mainId)
-
+            val partFolderId =
+                repository.getOrCreateFolder(
+                    drive,
+                    folder.name ?: "part1",
+                    uploadParentId
+                )
             // ... sisa kode upload file ke partFolderId ...
 
             Timber.d("Part Folder : $partFolderId")

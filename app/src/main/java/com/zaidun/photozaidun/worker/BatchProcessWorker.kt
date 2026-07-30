@@ -80,7 +80,8 @@ class BatchProcessWorker @AssistedInject constructor(
             ?: return Result.failure()
         logStep("Input Folder Ready")
         val wmShowTimestamp = preferences.showTimestamp.first()
-        val mainFolderName = preferences.mainFolder.first()
+        val folderLevels =
+            preferences.folderLevels.first()
         val partPrefix = preferences.partFolder.first()
         val maxPhotos = preferences.maxPhotoPerFolder.first()
         val suffix = preferences.fileSuffix.first()
@@ -100,10 +101,19 @@ class BatchProcessWorker @AssistedInject constructor(
         val wmInfoSize = preferences.infoFontSize.first()
         val startFrom = preferences.startPartNumber.first()
         logStep("Preferences Loaded")
-        val outputBaseFolder = if (mainFolderName.isBlank()) inputFolder else {
-            inputFolder.findFile(mainFolderName) ?: inputFolder.createDirectory(mainFolderName)
-            ?: inputFolder
-        }
+        var outputBaseFolder = inputFolder
+
+        folderLevels
+            .map { it.name.trim() }
+            .filter { it.isNotBlank() }
+            .forEach { folderName ->
+
+                outputBaseFolder =
+                    outputBaseFolder.findFile(folderName)
+                        ?: outputBaseFolder.createDirectory(folderName)
+                                ?: outputBaseFolder
+
+            }
         val processor = BitmapProcessor(applicationContext)
         val completed = AtomicInteger(0)
         try {
