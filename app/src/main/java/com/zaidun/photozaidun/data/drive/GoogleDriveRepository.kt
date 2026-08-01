@@ -11,7 +11,8 @@ import java.io.File as JavaFile
 import javax.inject.Inject
 
 class GoogleDriveRepository @Inject constructor() {
-    suspend fun getStorageInfo(drive: Drive
+    suspend fun getStorageInfo(
+        drive: Drive
 
     ): DriveStorageInfo {
 
@@ -33,6 +34,40 @@ class GoogleDriveRepository @Inject constructor() {
         )
 
     }
+    fun getAllFileNames(
+        drive: Drive,
+        parentFolderId: String
+    ): HashSet<String> {
+
+        val fileNames = hashSetOf<String>()
+
+        var pageToken: String? = null
+
+        do {
+
+            val result = drive.files()
+                .list()
+                .setQ("'$parentFolderId' in parents and trashed=false")
+                .setSpaces("drive")
+                .setFields("nextPageToken, files(name)")
+                .setPageToken(pageToken)
+                .execute()
+
+            result.files?.forEach {
+
+                fileNames.add(it.name)
+
+            }
+
+            pageToken = result.nextPageToken
+
+        } while (pageToken != null)
+
+        Timber.d("Jumlah file yang sudah ada = ${fileNames.size}")
+
+        return fileNames
+    }
+
 
     fun findFolder(
         drive: Drive,
@@ -77,6 +112,7 @@ class GoogleDriveRepository @Inject constructor() {
 
         return selected.id
     }
+
     fun findFolders(
         drive: Drive,
         folderName: String,

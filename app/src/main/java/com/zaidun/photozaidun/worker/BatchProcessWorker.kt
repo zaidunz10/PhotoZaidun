@@ -10,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
+import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -72,7 +73,10 @@ class BatchProcessWorker @AssistedInject constructor(
                     )
                     .build()
             WorkManager.getInstance(applicationContext)
-                .enqueue(request)
+                .enqueueUniqueWork(
+                    "UPLOAD_${folder.name}",
+                    ExistingWorkPolicy.KEEP,
+                    request)
         }
         Timber.tag("EXPORT").d("BATCH WORKER START")
         val inputFolderUriStr = inputData.getString("input_folder") ?: return Result.failure()

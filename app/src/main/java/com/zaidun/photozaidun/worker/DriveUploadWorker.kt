@@ -101,6 +101,12 @@ class DriveUploadWorker @AssistedInject constructor(
                     folder.name ?: "part1",
                     uploadParentId
                 )
+            val uploadedFiles =
+                repository.getAllFileNames(
+                    drive,
+                    partFolderId
+                )
+
             // ... sisa kode upload file ke partFolderId ...
 
             Timber.d("Part Folder : $partFolderId")
@@ -113,6 +119,8 @@ class DriveUploadWorker @AssistedInject constructor(
             val totalFiles = filesToUpload.size
 
             // Pastikan loop forEachIndexed membungkus logika update notifikasi
+            Timber.tag("UPLOAD")
+                .d("Total file di Drive = ${uploadedFiles.size}")
             filesToUpload.forEachIndexed { index, document ->
 
                 if (index % 5 == 0 || index == totalFiles - 1) {
@@ -135,12 +143,32 @@ class DriveUploadWorker @AssistedInject constructor(
                     }
                 }
 
-                val tempFile = document.copyToCache(applicationContext)
+                val tempFile =
+                    document.copyToCache(applicationContext)
 
                 try {
-                    repository.uploadFile(drive, tempFile, partFolderId)
+
+                    if (uploadedFiles.contains(tempFile.name)) {
+
+                        Timber.tag("UPLOAD")
+                            .d("Skip ${tempFile.name}")
+
+                        return@forEachIndexed
+                    }
+
+                    repository.uploadFile(
+                        drive,
+                        tempFile,
+                        partFolderId
+                    )
+
+                    uploadedFiles.add(tempFile.name)
+
                 } finally {
+
                     tempFile.delete()
+                    Timber.tag("UPLOAD")
+                        .d("Upload ${tempFile.name}")
                 }
             }
 
