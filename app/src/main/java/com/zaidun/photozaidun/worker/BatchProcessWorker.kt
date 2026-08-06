@@ -1,5 +1,6 @@
 package com.zaidun.photozaidun.worker
 
+// Automated edit test
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -22,6 +23,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import com.zaidun.photozaidun.data.local.datastore.UserPreferencesDataStore
 import com.zaidun.photozaidun.data.processor.bitmap.BitmapProcessor
+import com.zaidun.photozaidun.data.scanner.FastScanner
 import com.zaidun.photozaidun.domain.model.*
 import com.zaidun.photozaidun.worker.DriveUploadWorker.Companion.KEY_ACCESS_TOKEN
 import com.zaidun.photozaidun.worker.DriveUploadWorker.Companion.KEY_FOLDER_URI
@@ -34,7 +36,7 @@ import java.util.concurrent.atomic.AtomicInteger
 class BatchProcessWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted params: WorkerParameters,
-    private val preferences: UserPreferencesDataStore
+    private val preferences: UserPreferencesDataStore,
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         Timber.tag("WORKER").d("Worker ID = $id")
@@ -44,7 +46,9 @@ class BatchProcessWorker @AssistedInject constructor(
                 .d("[$step] +${System.currentTimeMillis() - workerStart} ms")
         }
         logStep("Worker Started")
-        val semaphore = Semaphore(2)
+
+        val parallelism = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(2, 4)
+        val semaphore = Semaphore(parallelism)
         try {
             setForeground(createForegroundInfo("Menyiapkan pemrosesan..."))
         } catch (e: Exception) {
@@ -120,12 +124,55 @@ class BatchProcessWorker @AssistedInject constructor(
             }
         val processor = BitmapProcessor(applicationContext)
         val completed = AtomicInteger(0)
+        val watermarkConfig =
+            if (wmUri.isNotBlank()) {
+
+                val logoUri = Uri.parse(wmUri)
+                val position = WatermarkPosition.valueOf(wmPos)
+
+                WatermarkConfig(
+                    type = WatermarkType.IMAGE,
+                    imageUri = logoUri,
+                    opacity = wmOpacity,
+                    size = wmScale,
+                    showFilename = wmShowFilename,
+                    position = position,
+                    showPart = wmShowPart,
+                    logoOffsetX = wmLogoX,
+                    logoOffsetY = wmLogoY,
+                    infoOffsetX = wmInfoX,
+                    infoOffsetY = wmInfoY,
+                    infoSize = wmInfoSize
+                )
+
+            } else {
+
+                WatermarkConfig(
+                    type = WatermarkType.TEXT,
+                    text = wmText,
+                    opacity = wmOpacity,
+                    size = wmScale,
+                    position = WatermarkPosition.valueOf(wmPos),
+                    showFilename = wmShowFilename
+                )
+            }
         try {
             val listStart = System.currentTimeMillis()
             Timber.tag("PERF").d("Mulai membaca isi folder...")
-            val imageFiles = inputFolder.listFiles()
-                .filter { it.type?.startsWith("image/") == true }
-                .sortedBy { it.name?.lowercase() }
+            val scanStart = System.currentTimeMillis()
+
+            val imageFiles =
+                FastScanner.scan(
+                    applicationContext,
+                    inputFolder
+                ).images
+
+            Timber.tag("SCAN")
+                .d(
+                    "Scanner selesai ${imageFiles.size} foto dalam ${
+                        System.currentTimeMillis() - scanStart
+                    } ms"
+                )
             Timber.tag("PERF").d(
                 "listFiles() selesai dalam ${System.currentTimeMillis() - listStart} ms"
             )
@@ -138,8 +185,15 @@ class BatchProcessWorker @AssistedInject constructor(
                     val currentFolderName = "${partPrefix}$partNumber"
                     val currentOutputFolder = outputBaseFolder.findFile(currentFolderName)
                         ?: outputBaseFolder.createDirectory(currentFolderName)
-                    val existingFiles = currentOutputFolder?.listFiles()
-                        ?.mapNotNull { it.name }?.toSet() ?: emptySet()
+                    val existingFiles = HashSet<String>()
+
+                    currentOutputFolder
+                        ?.listFiles()
+                        ?.forEach {
+
+                            it.name?.let(existingFiles::add)
+                        }
+
                     Timber.tag("EXPORT").d("Memproses Part $partNumber: ${partFiles.size} foto")
                     val deferredJobs = partFiles.mapIndexed { fileIndexInPart, file ->
                         async {
@@ -150,44 +204,19 @@ class BatchProcessWorker @AssistedInject constructor(
                                     return@withPermit
                                 }
                                 val outputFile = currentOutputFolder?.createFile(
-                                    file.type ?: "image/jpeg",
+                                    file.mime,
                                     outputFileName
                                 )
                                 outputFile?.uri?.let { outUri ->
                                     applicationContext.contentResolver.openOutputStream(outUri)
                                         ?.use { outStream ->
-                                            val watermarkConfig = if (wmUri.isNotBlank()) {
-                                                WatermarkConfig(
-                                                    type = WatermarkType.IMAGE,
-                                                    imageUri = Uri.parse(wmUri),
-                                                    opacity = wmOpacity,
-                                                    size = wmScale,
-                                                    showFilename = wmShowFilename,
-                                                    position = WatermarkPosition.valueOf(wmPos),
-                                                    showPart = wmShowPart,
-                                                    logoOffsetX = wmLogoX,
-                                                    logoOffsetY = wmLogoY,
-                                                    infoOffsetX = wmInfoX,
-                                                    infoOffsetY = wmInfoY,
-                                                    infoSize = wmInfoSize
-                                                )
-                                            } else {
-                                                WatermarkConfig(
-                                                    type = WatermarkType.TEXT,
-                                                    text = wmText,
-                                                    opacity = wmOpacity,
-                                                    size = wmScale,
-                                                    position = WatermarkPosition.valueOf(wmPos),
-                                                    showFilename = wmShowFilename
-                                                )
-                                            }
                                             processor.process(
                                                 inputUri = file.uri,
                                                 watermarkConfig = watermarkConfig,
                                                 resizeConfig = ResizeConfig(percentage = resize),
                                                 fileName = outputFileName,
                                                 partName = currentFolderName,
-                                                compressionConfig = CompressionConfig(quality = quality),
+                                                   compressionConfig = CompressionConfig(quality = quality),
                                                 outputStream = outStream,
                                                 showTimestamp = wmShowTimestamp
                                             )
@@ -201,10 +230,10 @@ class BatchProcessWorker @AssistedInject constructor(
                                                         "progress" to (done * 100 / imageFiles.size),
                                                         "current" to done,
                                                         "total" to imageFiles.size,
-                                                        "filename" to (file.name ?: "")
+                                                        "filename" to file.name
                                                     )
                                                 )
-                                                    Timber.tag("EXPORT_PROGRESS").d("Progress berhasil dikirim")
+                                                Timber.tag("EXPORT_PROGRESS").d("Progress berhasil dikirim")
 
                                                 try {
                                                     val msg =

@@ -56,7 +56,7 @@ fun ContactScreen() {
 
             Spacer(Modifier.height(16.dp))
 
-            Text("zaidunz_photo", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text("Watermark Pro", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Text("Professional Photography Service", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
 
             Spacer(Modifier.height(40.dp))

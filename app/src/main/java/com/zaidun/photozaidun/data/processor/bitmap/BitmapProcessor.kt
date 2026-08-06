@@ -19,29 +19,6 @@ class BitmapProcessor(private val context: Context) {
 
         drawer.clearCache()
     }
-    // Di dalam BitmapProcessor.kt
-
-    private fun getOriginalDateTime(uri: Uri): String {
-        return try {
-            context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                val exif = ExifInterface(inputStream)
-                // TAG_DATETIME_ORIGINAL biasanya berisi format "yyyy:MM:dd HH:mm:ss"
-                val dateTime = exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
-
-                if (!dateTime.isNullOrBlank()) {
-                    // Ubah format "2023:10:25 14:30:05" menjadi "25-10-2023 14:30"
-                    val parts = dateTime.split(" ")
-                    val dateParts = parts[0].split(":")
-                    val timeParts = parts[1].split(":")
-                    "${dateParts[2]}-${dateParts[1]}-${dateParts[0]}  ${timeParts[0]}:${timeParts[1]}"
-                } else {
-                    ""
-                }
-            } ?: ""
-        } catch (e: Exception) {
-            ""
-        }
-    }
 
     fun process(
         inputUri: Uri,
@@ -53,21 +30,37 @@ class BitmapProcessor(private val context: Context) {
         outputStream: OutputStream,
         showTimestamp: Boolean
     ) {
-        val exifDate = if (showTimestamp) getExifDate(inputUri) else ""
+        val exifInfo =
+            readExif(inputUri)
+
+        val exifDate =
+            if (showTimestamp)
+                exifInfo.date
+            else
+                ""
 
         var bitmap: Bitmap? = null
+        val decodeStart = System.currentTimeMillis()
         try {
             bitmap = loadFixedBitmap(
                 inputUri,
-                resizeConfig
+                resizeConfig,
+                exifInfo.orientation
             ) ?: return
+            Timber.tag("EXPORT_PERF").d(
+                "Decode $fileName = ${System.currentTimeMillis() - decodeStart} ms"
+            )
 
             // 1. Resize
             val resized = resize(bitmap, resizeConfig)
             if (resized != bitmap) { bitmap.recycle(); bitmap = resized }
 
-            // 2. Watermark (Kirim fileName ke sini)
+
+            val watermarkStart = System.currentTimeMillis()
             val watermarked = applyWatermark(bitmap, fileName, partName, exifDate, watermarkConfig)
+            Timber.tag("EXPORT_PERF").d(
+                "Watermark $fileName = ${System.currentTimeMillis() - watermarkStart} ms"
+            )
             if (watermarked != bitmap) { bitmap.recycle(); bitmap = watermarked }
 
             // 3. Simpan
@@ -76,8 +69,11 @@ class BitmapProcessor(private val context: Context) {
                 OutputFormat.WEBP -> Bitmap.CompressFormat.WEBP
                 else -> Bitmap.CompressFormat.JPEG
             }
-
+            val compressStart = System.currentTimeMillis()
             bitmap.compress(format, compressionConfig.quality, outputStream)
+            Timber.tag("EXPORT_PERF").d(
+                "Compress $fileName = ${System.currentTimeMillis() - compressStart} ms"
+            )
         } catch (e: Exception) {
             Timber.e(e, "Gagal memproses bitmap")
             throw e
@@ -87,32 +83,68 @@ class BitmapProcessor(private val context: Context) {
     }
     private var cachedLogo: Bitmap? = null
     private var cachedLogoUri: Uri? = null
+    private val parser =
+        SimpleDateFormat(
+            "yyyy:MM:dd HH:mm:ss",
+            Locale.US
+        )
 
-    private fun getExifDate(uri: Uri): String {
+    private val formatter =
+        SimpleDateFormat(
+            "EEEE, d MMMM yyyy  HH:mm",
+            Locale("id", "ID")
+        )
+
+    private fun readExif(uri: Uri): ExifInfo {
+
         return try {
-            context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                val exif = ExifInterface(inputStream)
-                // Format asli EXIF: "yyyy:MM:dd HH:mm:ss"
-                val dateString = exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
 
-                if (!dateString.isNullOrBlank()) {
-                    val parser = SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US)
-                    val date = parser.parse(dateString)
+            context.contentResolver
+                .openInputStream(uri)
+                ?.use { input ->
 
-                    if (date != null) {
-                        // Format: "Kamis, 25 Oktober 2023  14:30"
-                        val formatter = SimpleDateFormat("EEEE, d MMMM yyyy  HH:mm", Locale("id", "ID"))
-                        formatter.format(date)
-                    } else {
-                        ""
-                    }
-                } else {
-                    ""
+                    val exif =
+                        ExifInterface(input)
+
+                    val orientation =
+                        exif.getAttributeInt(
+                            ExifInterface.TAG_ORIENTATION,
+                            ExifInterface.ORIENTATION_NORMAL
+                        )
+
+                    val date =
+                        exif.getAttribute(
+                            ExifInterface.TAG_DATETIME_ORIGINAL
+                        )
+
+                    val formatted =
+                        if (!date.isNullOrBlank()) {
+
+                            parser.parse(date)
+                                ?.let(formatter::format)
+                                ?: ""
+
+                        } else ""
+
+                    ExifInfo(
+                        orientation,
+                        formatted
+                    )
+
                 }
-            } ?: ""
+
+                ?: ExifInfo(
+                    ExifInterface.ORIENTATION_NORMAL,
+                    ""
+                )
+
         } catch (e: Exception) {
-            Timber.e(e, "Gagal membaca EXIF date")
-            ""
+
+            ExifInfo(
+                ExifInterface.ORIENTATION_NORMAL,
+                ""
+            )
+
         }
     }
     private fun calculateInSampleSize(
@@ -140,9 +172,14 @@ class BitmapProcessor(private val context: Context) {
 
         return sample
     }
+    private data class ExifInfo(
+        val orientation: Int,
+        val date: String
+    )
     private fun loadFixedBitmap(
         uri: Uri,
-        resizeConfig: ResizeConfig
+        resizeConfig: ResizeConfig,
+        orientation: Int
     ): Bitmap? {
         // Di loadFixedBitmap (BitmapProcessor.kt)
 
@@ -164,7 +201,7 @@ class BitmapProcessor(private val context: Context) {
 
         val options = BitmapFactory.Options().apply {
             inSampleSize = sampleSize
-            inPreferredConfig = Bitmap.Config.RGB_565
+            inPreferredConfig = Bitmap.Config.ARGB_8888
             inMutable = true
         }
 
@@ -178,13 +215,6 @@ class BitmapProcessor(private val context: Context) {
                 original.copy(Bitmap.Config.ARGB_8888, true).also {
                     original.recycle()
                 }
-
-        val orientation = resolver.openInputStream(uri)?.use {
-            ExifInterface(it).getAttributeInt(
-                ExifInterface.TAG_ORIENTATION,
-                ExifInterface.ORIENTATION_NORMAL
-            )
-        } ?: ExifInterface.ORIENTATION_NORMAL
 
         val matrix = Matrix()
 

@@ -23,13 +23,26 @@ import com.zaidun.photozaidun.presentation.screen.settings.SettingsScreen
 import com.zaidun.photozaidun.presentation.screen.watermarksettings.WatermarkSettingsScreen
 import com.zaidun.photozaidun.presentation.shared.SharedFolderViewModel
 
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.core.tween
+import com.zaidun.photozaidun.presentation.theme.motion.MotionTokens
+
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
+
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun MainScreen(
     homeViewModel: HomeViewModel,
     sharedFolderViewModel: SharedFolderViewModel,
     onNavigateToFolderPicker: () -> Unit,
     onNavigateToHistory: () -> Unit,
-    onNavigateToExportLoading: () -> Unit
+    onNavigateToExportLoading: () -> Unit,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope
 ) {
     val navController = rememberNavController()
     val items = listOf(
@@ -62,7 +75,9 @@ fun MainScreen(
                         selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
                         onClick = {
                             navController.navigate(screen.route) {
-                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
                                 launchSingleTop = true
                                 restoreState = true
                             }
@@ -75,7 +90,23 @@ fun MainScreen(
         NavHost(
             navController = navController,
             startDestination = Screen.Home.route,
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.padding(innerPadding),
+            enterTransition = {
+                fadeIn(tween(MotionTokens.DURATION_TAB_SWITCH)) +
+                slideInVertically(
+                    animationSpec = tween(MotionTokens.DURATION_TAB_SWITCH),
+                    initialOffsetY = { it / 20 }
+                )
+            },
+            exitTransition = { fadeOut(tween(MotionTokens.DURATION_TAB_SWITCH)) },
+            popEnterTransition = {
+                fadeIn(tween(MotionTokens.DURATION_TAB_SWITCH)) +
+                slideInVertically(
+                    animationSpec = tween(MotionTokens.DURATION_TAB_SWITCH),
+                    initialOffsetY = { it / 20 }
+                )
+            },
+            popExitTransition = { fadeOut(tween(MotionTokens.DURATION_TAB_SWITCH)) }
         ) {
             composable(Screen.Home.route) {
                 HomeScreen(
@@ -85,7 +116,9 @@ fun MainScreen(
                     onNavigateToHistory = onNavigateToHistory,
                     onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                     onNavigateToFolderPicker = onNavigateToFolderPicker,
-                    onNavigateToWatermark = { navController.navigate(Screen.Watermark.route) }
+                    onNavigateToWatermark = { navController.navigate(Screen.Watermark.route) },
+                    sharedTransitionScope = sharedTransitionScope,
+                    animatedVisibilityScope = this@composable
                 )
             }
             composable(Screen.Watermark.route) {

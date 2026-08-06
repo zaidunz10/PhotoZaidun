@@ -31,6 +31,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.zaidun.photozaidun.data.processor.watermark.WatermarkDrawer
 import com.zaidun.photozaidun.utils.BitmapUtils
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
+import com.zaidun.photozaidun.presentation.theme.motion.MotionTokens
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WatermarkSettingsScreen(
@@ -48,11 +53,37 @@ fun WatermarkSettingsScreen(
     var cachedLogo by remember { mutableStateOf<Bitmap?>(null) }
     var renderedPreview by remember { mutableStateOf<Bitmap?>(null) }
 
+    // State untuk mendeteksi apakah sedang drag
+    var isDragging by remember { mutableStateOf(false) }
+
     // State Lokal untuk Slider agar instan (tidak menunggu DataStore)
     var logoOpacity by remember(uiState.opacity) { mutableFloatStateOf(uiState.opacity) }
     var logoScale by remember(uiState.scale) { mutableFloatStateOf(uiState.scale) }
     var logoX by remember(uiState.logoOffsetX) { mutableFloatStateOf(uiState.logoOffsetX) }
     var logoY by remember(uiState.logoOffsetY) { mutableFloatStateOf(uiState.logoOffsetY) }
+    
+    // Animasi untuk nilai-nilai di atas dengan logika snap saat drag
+    val animatedOpacity by animateFloatAsState(
+        targetValue = logoOpacity,
+        animationSpec = if (isDragging) snap() else tween(150, easing = MotionTokens.ScreenEasing),
+        label = "opacity"
+    )
+    val animatedScale by animateFloatAsState(
+        targetValue = logoScale,
+        animationSpec = if (isDragging) snap() else tween(150, easing = MotionTokens.ScreenEasing),
+        label = "scale"
+    )
+    val animatedX by animateFloatAsState(
+        targetValue = logoX,
+        animationSpec = if (isDragging) snap() else tween(150),
+        label = "logoX"
+    )
+    val animatedY by animateFloatAsState(
+        targetValue = logoY,
+        animationSpec = if (isDragging) snap() else tween(150),
+        label = "logoY"
+    )
+
     var showTimestamp by remember(uiState.showTimestamp) { mutableStateOf(uiState.showTimestamp) }
     var infoX by remember(uiState.infoOffsetX) { mutableFloatStateOf(uiState.infoOffsetX) }
     var infoY by remember(uiState.infoOffsetY) { mutableFloatStateOf(uiState.infoOffsetY) }
@@ -84,18 +115,17 @@ fun WatermarkSettingsScreen(
         }
     }
 
-    // RENDER PREVIEW REALTIME (Sangat cepat karena hanya draw, tidak decode)
-    // RENDER PREVIEW REALTIME
-    LaunchedEffect(cachedPreview, cachedLogo, logoOpacity, logoScale, logoX, logoY, infoX, infoY, infoSize, showFile, showPart, showTimestamp) {
+    // RENDER PREVIEW REALTIME (Menggunakan animated values)
+    LaunchedEffect(cachedPreview, cachedLogo, animatedOpacity, animatedScale, animatedX, animatedY, infoX, infoY, infoSize, showFile, showPart, showTimestamp) {
         cachedPreview?.let { preview ->
             val temp = preview.copy(Bitmap.Config.ARGB_8888, true)
             renderedPreview = drawer.draw(
                 bitmap = temp,
                 watermark = cachedLogo,
-                alpha = logoOpacity,
-                scale = logoScale,
-                logoOffsetX = logoX,
-                logoOffsetY = logoY,
+                alpha = animatedOpacity,
+                scale = animatedScale,
+                logoOffsetX = animatedX,
+                logoOffsetY = animatedY,
                 infoOffsetX = infoX,
                 infoOffsetY = infoY,
                 infoSize = infoSize,
@@ -103,7 +133,6 @@ fun WatermarkSettingsScreen(
                 showPart = showPart,
                 fileName = "IMG_0001.jpg",
                 partName = "Part 1",
-                // TAMBAHKAN BARIS INI:
                 exifDate = if (showTimestamp) "Sabtu, 25 Oktober 2023  14:30" else ""
             )
         }
@@ -192,10 +221,10 @@ fun WatermarkSettingsScreen(
 
                 // LOGO SETTINGS
                 Text("Logo Watermark", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                ControlSlider("Opacity", logoOpacity, 0f, 1f) { logoOpacity = it }
-                ControlSlider("Skala", logoScale, 0.05f, 0.8f) { logoScale = it }
-                ControlSlider("Posisi X", logoX, 0f, 1f) { logoX = it }
-                ControlSlider("Posisi Y", logoY, 0f, 1f) { logoY = it }
+                ControlSlider("Opacity", logoOpacity, 0f, 1f, { isDragging = it }) { logoOpacity = it }
+                ControlSlider("Skala", logoScale, 0.05f, 0.8f, { isDragging = it }) { logoScale = it }
+                ControlSlider("Posisi X", logoX, 0f, 1f, { isDragging = it }) { logoX = it }
+                ControlSlider("Posisi Y", logoY, 0f, 1f, { isDragging = it }) { logoY = it }
 
                 Spacer(Modifier.height(24.dp))
 
@@ -213,24 +242,34 @@ fun WatermarkSettingsScreen(
                     Checkbox(checked = showTimestamp, onCheckedChange = { showTimestamp = it })
                     Text("Tampilkan Tanggal dan jam")
                 }
-                ControlSlider("Ukuran Teks", infoSize, 0.01f, 0.1f) { infoSize = it }
-                ControlSlider("Posisi X", infoX, 0f, 1f) { infoX = it }
-                ControlSlider("Posisi Y", infoY, 0f, 1f) { infoY = it }
+                ControlSlider("Ukuran Teks", infoSize, 0.01f, 0.1f, { isDragging = it }) { infoSize = it }
+                ControlSlider("Posisi X", infoX, 0f, 1f, { isDragging = it }) { infoX = it }
+                ControlSlider("Posisi Y", infoY, 0f, 1f, { isDragging = it }) { infoY = it }
 
                 Spacer(Modifier.height(32.dp))
-                Text("zaidunz_photo © 2024", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, fontSize = 10.sp, color = Color.LightGray)
+                Text("zaidunz_photo © 2026", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, fontSize = 10.sp, color = Color.LightGray)
             }
         }
     }
 }
 
-@Composable
-fun ControlSlider(label: String, value: Float, min: Float, max: Float, onValueChange: (Float) -> Unit) {
-    Column(Modifier.padding(vertical = 8.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, style = MaterialTheme.typography.bodySmall)
-            Text("${(value * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+    @Composable
+    fun ControlSlider(label: String, value: Float, min: Float, max: Float, onDraggingChange: (Boolean) -> Unit, onValueChange: (Float) -> Unit) {
+        Column(Modifier.padding(vertical = 8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(label, style = MaterialTheme.typography.bodySmall)
+                Text("${(value * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+            }
+            Slider(
+                value = value,
+                valueRange = min..max,
+                onValueChange = { 
+                    onDraggingChange(true)
+                    onValueChange(it) 
+                },
+                onValueChangeFinished = {
+                    onDraggingChange(false)
+                }
+            )
         }
-        Slider(value = value, valueRange = min..max, onValueChange = onValueChange)
     }
-}

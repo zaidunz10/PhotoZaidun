@@ -35,6 +35,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.clip
 import timber.log.Timber
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.ui.text.style.TextOverflow
+
 @Composable
 fun ExportLoadingScreen(
     viewModel: HomeViewModel,
@@ -44,7 +48,7 @@ fun ExportLoadingScreen(
     val uiState by viewModel.uiState.collectAsState()
     val animatedProgress by animateFloatAsState(
         targetValue = uiState.progress / 100f,
-        animationSpec = tween(durationMillis = 500, easing = LinearOutSlowInEasing),
+        animationSpec = tween(durationMillis = 400, easing = LinearEasing),
         label = "smoothProgress"
     )
     BackHandler(true) {
@@ -92,7 +96,7 @@ fun ExportLoadingScreen(
             Spacer(Modifier.height(24.dp))
 
             LinearProgressIndicator(
-                progress = { animatedProgress }, // Gunakan animatedProgress
+                progress = { animatedProgress },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(8.dp)
@@ -100,18 +104,32 @@ fun ExportLoadingScreen(
             )
             Spacer(Modifier.height(16.dp))
 
-            Text("${uiState.progress}%")
+            Crossfade(
+                targetState = "${uiState.progress}%",
+                animationSpec = tween(180),
+                label = "progressText"
+            ) { text ->
+                Text(text, style = MaterialTheme.typography.titleLarge)
+            }
 
             Spacer(Modifier.height(8.dp))
 
-            Text("${uiState.current} / ${uiState.total}")
+            Text("${uiState.current} / ${uiState.total}", style = MaterialTheme.typography.bodyMedium)
 
             Spacer(Modifier.height(16.dp))
 
-            Text(
-                uiState.currentFilename,
-                maxLines = 1
-            )
+            Crossfade(
+                targetState = uiState.currentFilename,
+                animationSpec = tween(180),
+                label = "filename"
+            ) { filename ->
+                Text(
+                    filename,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
 
             Spacer(Modifier.height(40.dp))
 

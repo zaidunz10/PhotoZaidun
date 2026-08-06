@@ -42,8 +42,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.zaidun.photozaidun.presentation.component.motion.PressAnimatedButton
+import com.zaidun.photozaidun.presentation.theme.motion.MotionTokens
 import androidx.documentfile.provider.DocumentFile
 import android.net.Uri
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.itemsIndexed
 import coil3.compose.AsyncImage
 import com.zaidun.photozaidun.utils.toReadableSize
@@ -61,7 +67,8 @@ private val SubtleGray = Color(0xFF6B6079)
 private val LabelGray = Color(0xFF8A7F98)
 
 
-@OptIn(ExperimentalMaterial3Api::class)
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
@@ -70,7 +77,9 @@ fun HomeScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToExportLoading: () -> Unit,
     onNavigateToFolderPicker: () -> Unit,
-    onNavigateToWatermark: () -> Unit
+    onNavigateToWatermark: () -> Unit,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope
 ) {
 
     val uiState by viewModel.uiState.collectAsState()
@@ -104,12 +113,6 @@ fun HomeScreen(
 
     val photos by sharedFolderViewModel.photos.collectAsState()
     val coroutineScope = rememberCoroutineScope()
-    var pressed by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.95f else 1f,
-        animationSpec = tween(120),
-        label = "buttonScale"
-    )
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -321,7 +324,7 @@ fun HomeScreen(
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    itemsIndexed(photos) { index, photo ->
+                    itemsIndexed(photos, key = { _, photo -> photo.uri.toString() }) { index, photo ->
                         // --- ANIMASI: tiap foto muncul dengan fade + scale, staggered per index ---
                         var itemVisible by remember(photo.uri) { mutableStateOf(false) }
 
@@ -330,23 +333,36 @@ fun HomeScreen(
                             itemVisible = true
                         }
 
-                        AnimatedVisibility(
-                            visible = itemVisible,
-                            enter = fadeIn(tween(300)) + scaleIn(
-                                initialScale = 0.85f,
-                                animationSpec = tween(300)
-                            )
-                        ) {
-                            Card(
-                                modifier = Modifier.size(78.dp),
-                                shape = RoundedCornerShape(14.dp)
-                            ) {
-                                AsyncImage(
-                                    model = photo.uri,
-                                    contentDescription = null,
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop
+                        with(sharedTransitionScope) {
+                            AnimatedVisibility(
+                                visible = itemVisible,
+                                enter = fadeIn(tween(300)) + scaleIn(
+                                    initialScale = 0.85f,
+                                    animationSpec = tween(300)
                                 )
+                            ) {
+                                Card(
+                                    modifier = Modifier
+                                        .size(78.dp)
+                                        .sharedElement(
+                                            rememberSharedContentState(key = "photo-${photo.uri}"),
+                                            animatedVisibilityScope = animatedVisibilityScope,
+                                            boundsTransform = { _, _ ->
+                                                tween(durationMillis = 350, easing = MotionTokens.ScreenEasing)
+                                            }
+                                        )
+                                        .clickable {
+                                            // Navigation placeholder
+                                        },
+                                    shape = RoundedCornerShape(14.dp)
+                                ) {
+                                    AsyncImage(
+                                        model = photo.uri,
+                                        contentDescription = null,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                }
                             }
                         }
                     }
@@ -358,7 +374,7 @@ fun HomeScreen(
             Spacer(Modifier.height(24.dp))
 
             // Tombol Export — elemen paling menonjol
-            Button(
+            PressAnimatedButton(
                 onClick = {
                     activity?.let { activity ->
                         viewModel.refreshTokenForUpload(activity) { token ->
@@ -369,18 +385,8 @@ fun HomeScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp)
-                    .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
-                    },
-                enabled = uiState.totalImages > 0 && !uiState.isProcessing,
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = DeepPurple,
-                    contentColor = Color.White,
-                    disabledContainerColor = Color.LightGray.copy(alpha = 0.5f)
-                )
+                    .height(56.dp),
+                enabled = uiState.totalImages > 0 && !uiState.isProcessing
             ) {
                 Icon(Icons.Default.PlayArrow, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
