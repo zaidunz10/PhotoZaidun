@@ -16,6 +16,39 @@ class WatermarkSettingsViewModel @Inject constructor(
     private val preferences: UserPreferencesDataStore,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
+    fun saveAllSettings(
+        opacity: Float,
+        scale: Float,
+        logoX: Float,
+        logoY: Float,
+        showFile: Boolean,
+        showPart: Boolean,
+        infoX: Float,
+        infoY: Float,
+        infoSize: Float,
+        showTimestamp: Boolean,
+        onSaved: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            try {
+                preferences.saveWatermarkOpacity(opacity)
+                preferences.saveWatermarkScale(scale)
+                preferences.saveLogoOffset(logoX, logoY)
+
+                preferences.saveShowFilename(showFile)
+                preferences.saveShowPart(showPart)
+                preferences.saveInfoOffset(infoX, infoY)
+                preferences.saveInfoFontSize(infoSize)
+
+                preferences.saveShowTimestamp(showTimestamp)
+
+                onSaved()
+            } catch (e: Exception) {
+                Timber.e(e, "Gagal menyimpan pengaturan watermark")
+            }
+        }
+    }
+
 
     val uiState: StateFlow<WatermarkSettingsUiState> = combine(
         preferences.watermarkUri,    // 0

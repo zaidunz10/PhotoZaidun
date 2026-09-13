@@ -202,29 +202,77 @@ class GoogleDriveRepository @Inject constructor() {
         localFile: JavaFile,
         parentFolderId: String? = null
     ): String {
+
+        val fileName = localFile.name
+
+        // CEK SEKALI LAGI sebelum upload
+        if (parentFolderId != null) {
+
+            val escapedName =
+                fileName.replace("'", "\\'")
+
+            val query =
+                "'$parentFolderId' in parents " +
+                        "and name='$escapedName' " +
+                        "and trashed=false"
+
+            val existing = drive.files()
+                .list()
+                .setQ(query)
+                .setSpaces("drive")
+                .setFields("files(id,name)")
+                .execute()
+                .files
+
+            if (!existing.isNullOrEmpty()) {
+
+                val existingFile = existing.first()
+
+                Timber.w(
+                    "SKIP DUPLICATE: $fileName sudah ada " +
+                            "di Drive (${existingFile.id})"
+                )
+
+                return existingFile.id
+            }
+        }
+
+        // Kalau belum ada → upload
         val metadata = File().apply {
-            name = localFile.name
+
+            name = fileName
+
             if (parentFolderId != null) {
                 parents = listOf(parentFolderId)
             }
         }
 
-        val mimeType = URLConnection.guessContentTypeFromName(localFile.name)
-            ?: "application/octet-stream"
+        val mimeType =
+            URLConnection.guessContentTypeFromName(fileName)
+                ?: "application/octet-stream"
 
-        val media = FileContent(mimeType, localFile)
+        val media =
+            FileContent(
+                mimeType,
+                localFile
+            )
 
-        // UBAH DARI SINI KE BAWAH:
-        val request = drive.files().create(metadata, media)
-            .setFields("id,name")
+        val request =
+            drive.files()
+                .create(metadata, media)
+                .setFields("id,name")
 
-        // Baris kunci untuk mencegah error "File Not Found":
-        request.mediaHttpUploader.isDirectUploadEnabled = true
+        request
+            .mediaHttpUploader
+            .isDirectUploadEnabled = true
 
-        val uploaded = request.execute()
-        // SAMPAI SINI
+        val uploaded =
+            request.execute()
 
-        Timber.d("Upload berhasil: ${uploaded.name} (${uploaded.id})")
+        Timber.d(
+            "Upload berhasil: ${uploaded.name} (${uploaded.id})"
+        )
+
         return uploaded.id
     }
 }

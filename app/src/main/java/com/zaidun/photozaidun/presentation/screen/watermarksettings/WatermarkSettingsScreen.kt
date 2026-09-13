@@ -1,5 +1,7 @@
 package com.zaidun.photozaidun.presentation.screen.watermarksettings
-
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.IntSize
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
@@ -35,7 +37,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import com.zaidun.photozaidun.presentation.theme.motion.MotionTokens
-
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WatermarkSettingsScreen(
@@ -161,13 +164,26 @@ fun WatermarkSettingsScreen(
                     // Di dalam TopAppBar actions
                     Button(
                         onClick = {
-                            // Kirim semua state lokal ke ViewModel
-                            viewModel.updateLogoSettings(logoOpacity, logoScale, logoX, logoY)
-                            viewModel.updateInfoSettings(showFile, showPart, infoX, infoY, infoSize)
-                            viewModel.updateTimestamp(showTimestamp)
+                            viewModel.saveAllSettings(
+                                opacity = logoOpacity,
+                                scale = logoScale,
+                                logoX = logoX,
+                                logoY = logoY,
+                                showFile = showFile,
+                                showPart = showPart,
+                                infoX = infoX,
+                                infoY = infoY,
+                                infoSize = infoSize,
+                                showTimestamp = showTimestamp
+                            ) {
+                                Toast.makeText(
+                                    context,
+                                    "Pengaturan berhasil disimpan",
+                                    Toast.LENGTH_SHORT
+                                ).show()
 
-                            Toast.makeText(context, "Pengaturan Disimpan", Toast.LENGTH_SHORT).show()
-                            onBack()
+                                onBack()
+                            }
                         },
                         modifier = Modifier.padding(end = 8.dp)
                     ) {
@@ -192,7 +208,54 @@ fun WatermarkSettingsScreen(
                     Image(
                         bitmap = renderedPreview!!.asImageBitmap(),
                         contentDescription = null,
-                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(8.dp))
+                            .pointerInput(Unit) {
+
+                                detectDragGestures(
+                                    onDragStart = {
+                                        isDragging = true
+                                    },
+
+                                    onDragEnd = {
+                                        isDragging = false
+                                    },
+
+                                    onDragCancel = {
+                                        isDragging = false
+                                    }
+
+                                ) { change, dragAmount ->
+
+                                    change.consume()
+
+                                    /*
+                                     * Gerakan jari horizontal
+                                     * mengubah Posisi X.
+                                     */
+                                    logoX = (
+                                            logoX +
+                                                    dragAmount.x / 900f
+                                            ).coerceIn(
+                                            0f,
+                                            1f
+                                        )
+
+                                    /*
+                                     * Gerakan jari vertikal
+                                     * mengubah Posisi Y.
+                                     */
+                                    logoY = (
+                                            logoY +
+                                                    dragAmount.y / 900f
+                                            ).coerceIn(
+                                            0f,
+                                            1f
+                                        )
+                                }
+                            },
+
                         contentScale = ContentScale.Fit
                     )
                 } else {

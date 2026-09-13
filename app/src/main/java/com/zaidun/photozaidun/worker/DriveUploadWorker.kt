@@ -8,10 +8,10 @@ import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.documentfile.provider.DocumentFile
-import androidx.work.ForegroundInfo
-import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
+import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
+import androidx.hilt.work.HiltWorker
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.zaidun.photozaidun.data.drive.DriveServiceFactory
 import com.zaidun.photozaidun.data.drive.GoogleDriveRepository
@@ -19,8 +19,18 @@ import com.zaidun.photozaidun.data.drive.copyToCache
 import com.zaidun.photozaidun.data.local.datastore.UserPreferencesDataStore
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.flow.first
 import timber.log.Timber
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 @HiltWorker
 class DriveUploadWorker @AssistedInject constructor(
@@ -30,55 +40,101 @@ class DriveUploadWorker @AssistedInject constructor(
     private val driveServiceFactory: DriveServiceFactory,
     private val repository: GoogleDriveRepository
 ) : CoroutineWorker(context, params) {
+
     private val notificationManager =
-        context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        context.getSystemService(Context.NOTIFICATION_SERVICE)
+                as NotificationManager
 
     companion object {
+
         const val KEY_FOLDER_URI = "folder_uri"
         const val KEY_ACCESS_TOKEN = "access_token"
+
         private const val CHANNEL_ID = "drive_upload_channel"
         private const val NOTIFICATION_ID = 101
+
+        // JUMLAH UPLOAD BERSAMAAN
+        private const val UPLOAD_PARALLELISM = 20
     }
 
-
     override suspend fun doWork(): Result {
+
         createNotificationChannel()
+
         try {
-            setForeground(createForegroundInfo("Menyiapkan upload..."))
+            setForeground(
+                createForegroundInfo("Menyiapkan upload...")
+            )
         } catch (e: Exception) {
-            Timber.e("Gagal setForeground: ${e.message}")
+            Timber.e(e, "Gagal setForeground")
         }
 
-        Timber.tag("DriveDr").d("=== DRIVE WORKER STARTED ===")
+        Timber.tag("DriveUpload")
+            .d("=== DRIVE UPLOAD WORKER STARTED ===")
 
-        // Ambil URI folder yang dikirim dari BatchProcessWorker
-        val folderUriStr = inputData.getString("folder_uri") ?: return Result.failure()
-        val folderUri = Uri.parse(folderUriStr)
+        // ---------------------------------------------------------
+        // 1. AMBIL FOLDER
+        // ---------------------------------------------------------
 
-        val token = preferences.driveAccessToken.first()
+        val folderUriString =
+            inputData.getString(KEY_FOLDER_URI)
+                ?: return Result.failure()
+
+        val folderUri =
+            Uri.parse(folderUriString)
+
+        val folder =
+            DocumentFile.fromTreeUri(
+                applicationContext,
+                folderUri
+            ) ?: return Result.failure()
+
+        // ---------------------------------------------------------
+        // 2. AMBIL TOKEN
+        // ---------------------------------------------------------
+
+        val token =
+            preferences.driveAccessToken.first()
 
         if (token.isBlank()) {
+
             Timber.e("Access Token kosong")
-            showFinalNotification(false, "Token Google Drive tidak tersedia")
+
+            showFinalNotification(
+                false,
+                "Token Google Drive tidak tersedia"
+            )
+
             return Result.failure()
         }
-        val drive = driveServiceFactory.create(token)
 
-
-
-        // Memerlukan import androidx.documentfile.provider.DocumentFile
-        val folder = DocumentFile.fromTreeUri(applicationContext, folderUri) ?: return Result.failure()
+        val drive =
+            driveServiceFactory.create(token)
 
         return try {
-            // AMBIL INPUT USER DARI DATASTORE
-            val rootName = preferences.rootFolder.first().ifBlank { "My Photo App" }
+
+            // -----------------------------------------------------
+            // 3. BUAT STRUKTUR FOLDER DRIVE
+            // -----------------------------------------------------
+
+            val rootName =
+                preferences.rootFolder
+                    .first()
+                    .ifBlank { "My Photo App" }
+
             val folderLevels =
                 preferences.folderLevels.first()
-            // LEVEL 1: Folder paling atas (sesuai input user)
-            val rootId = repository.getOrCreateFolder(drive, rootName)
+
+            // ROOT
+            val rootId =
+                repository.getOrCreateFolder(
+                    drive,
+                    rootName
+                )
 
             var uploadParentId = rootId
 
+            // SUB FOLDER
             folderLevels
                 .map { it.name.trim() }
                 .filter { it.isNotBlank() }
@@ -90,89 +146,327 @@ class DriveUploadWorker @AssistedInject constructor(
                             folderName,
                             uploadParentId
                         )
-
                 }
 
-            // LEVEL 3: Folder Part (part_1, part_2, dst)
-            // folder.name adalah nama folder lokal yang sudah mengandung prefix (misal: "bagian_1")
+            // PART
             val partFolderId =
                 repository.getOrCreateFolder(
                     drive,
                     folder.name ?: "part1",
                     uploadParentId
                 )
-            val uploadedFiles =
+
+            Timber.tag("DriveUpload")
+                .d("Part Folder ID = $partFolderId")
+
+            // -----------------------------------------------------
+            // 4. AMBIL FILE YANG SUDAH ADA DI DRIVE
+            // -----------------------------------------------------
+
+            val existingFiles =
                 repository.getAllFileNames(
                     drive,
                     partFolderId
                 )
 
-            // ... sisa kode upload file ke partFolderId ...
+            /*
+             * ConcurrentHashMap dipakai karena 20 coroutine
+             * akan mengakses daftar ini bersamaan.
+             */
+            val uploadedFiles =
+                ConcurrentHashMap.newKeySet<String>()
 
-            Timber.d("Part Folder : $partFolderId")
+            uploadedFiles.addAll(existingFiles)
 
-            Timber.d("Memulai upload folder ke Google Drive: ${folder.name}")
+            Timber.tag("DriveUpload")
+                .d(
+                    "File sudah ada di Drive = ${uploadedFiles.size}"
+                )
 
-            Timber.d("Memulai upload folder ke Google Drive: ${folder.name}")
+            // -----------------------------------------------------
+            // 5. AMBIL SEMUA FOTO LOKAL
+            // -----------------------------------------------------
 
-            val filesToUpload = folder.listFiles().filter { it.type?.startsWith("image/") == true }
-            val totalFiles = filesToUpload.size
-
-            // Pastikan loop forEachIndexed membungkus logika update notifikasi
-            Timber.tag("UPLOAD")
-                .d("Total file di Drive = ${uploadedFiles.size}")
-            filesToUpload.forEachIndexed { index, document ->
-
-                if (index % 5 == 0 || index == totalFiles - 1) {
-                    val progressText = "Mengunggah ${index + 1}/$totalFiles foto"
-
-                    try {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                            setForeground(
-                                ForegroundInfo(
-                                    NOTIFICATION_ID,
-                                    createForegroundInfo(progressText).notification,
-                                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-                                )
-                            )
-                        } else {
-                            setForeground(createForegroundInfo(progressText))
-                        }
-                    } catch (e: Exception) {
-                        Timber.e(e)
+            val filesToUpload =
+                folder.listFiles()
+                    .filter {
+                        it.type?.startsWith("image/") == true
                     }
+
+            val totalFiles =
+                filesToUpload.size
+
+            if (totalFiles == 0) {
+
+                showFinalNotification(
+                    true,
+                    "Tidak ada foto untuk diupload"
+                )
+
+                return Result.success()
+            }
+
+            Timber.tag("DriveUpload")
+                .d(
+                    "Total foto lokal = $totalFiles"
+                )
+
+            // -----------------------------------------------------
+            // 6. HITUNG YANG SUDAH ADA
+            // -----------------------------------------------------
+
+            val alreadyUploaded =
+                filesToUpload.count {
+                    it.name != null &&
+                            uploadedFiles.contains(it.name)
                 }
 
-                val tempFile =
-                    document.copyToCache(applicationContext)
+            val pendingFiles =
+                filesToUpload.filter {
+                    it.name != null &&
+                            !uploadedFiles.contains(it.name)
+                }
+
+            Timber.tag("DriveUpload")
+                .d(
+                    "Sudah ada = $alreadyUploaded"
+                )
+
+            Timber.tag("DriveUpload")
+                .d(
+                    "Perlu upload = ${pendingFiles.size}"
+                )
+
+            // Semua sudah ada
+            if (pendingFiles.isEmpty()) {
+
+                showFinalNotification(
+                    true,
+                    "Semua foto sudah ada di Google Drive"
+                )
+
+                return Result.success()
+            }
+
+            // -----------------------------------------------------
+            // 7. SEMAPHORE 20 UPLOAD
+            // -----------------------------------------------------
+
+            val semaphore =
+                Semaphore(UPLOAD_PARALLELISM)
+
+            val completed =
+                AtomicInteger(alreadyUploaded)
+
+            val failedFiles =
+                ConcurrentHashMap.newKeySet<String>()
+
+            // -----------------------------------------------------
+            // 8. UPDATE NOTIFICATION
+            // -----------------------------------------------------
+
+            suspend fun updateProgress() {
+
+                val current =
+                    completed.incrementAndGet()
+
+                val progressText =
+                    "Mengunggah $current/$totalFiles foto"
 
                 try {
 
-                    if (uploadedFiles.contains(tempFile.name)) {
+                    if (
+                        Build.VERSION.SDK_INT >=
+                        Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+                    ) {
 
-                        Timber.tag("UPLOAD")
-                            .d("Skip ${tempFile.name}")
+                        setForeground(
+                            ForegroundInfo(
+                                NOTIFICATION_ID,
+                                createForegroundInfo(
+                                    progressText
+                                ).notification,
+                                ServiceInfo
+                                    .FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                            )
+                        )
 
-                        return@forEachIndexed
+                    } else {
+
+                        setForeground(
+                            createForegroundInfo(
+                                progressText
+                            )
+                        )
                     }
 
-                    repository.uploadFile(
-                        drive,
-                        tempFile,
-                        partFolderId
+                } catch (e: Exception) {
+
+                    Timber.e(
+                        e,
+                        "Gagal update notification"
                     )
-
-                    uploadedFiles.add(tempFile.name)
-
-                } finally {
-
-                    tempFile.delete()
-                    Timber.tag("UPLOAD")
-                        .d("Upload ${tempFile.name}")
                 }
             }
 
-            showFinalNotification(true, "Upload selesai")
+            // -----------------------------------------------------
+            // 9. UPLOAD 20 PARALEL
+            // -----------------------------------------------------
+
+            supervisorScope {
+
+                pendingFiles.map { document ->
+
+                    async(Dispatchers.IO) {
+
+                        semaphore.withPermit {
+
+                            val fileName =
+                                document.name
+                                    ?: "unknown.jpg"
+
+                            /*
+                             * Double check.
+                             *
+                             * Bisa saja file sudah masuk Drive
+                             * sebelum coroutine ini mulai.
+                             */
+                            if (
+                                uploadedFiles.contains(
+                                    fileName
+                                )
+                            ) {
+
+                                Timber.tag("DriveUpload")
+                                    .d(
+                                        "SKIP: $fileName"
+                                    )
+
+                                return@withPermit
+                            }
+
+                            Timber.tag("DriveUpload")
+                                .d(
+                                    "START: $fileName"
+                                )
+
+                            var tempFile: java.io.File? =
+                                null
+
+                            try {
+
+                                // ---------------------------------
+                                // COPY KE CACHE
+                                // ---------------------------------
+
+                                tempFile =
+                                    document.copyToCache(
+                                        applicationContext
+                                    )
+
+                                // ---------------------------------
+                                // UPLOAD
+                                // ---------------------------------
+
+                                repository.uploadFile(
+                                    drive = drive,
+                                    localFile = tempFile,
+                                    parentFolderId =
+                                        partFolderId
+                                )
+
+                                // ---------------------------------
+                                // BERHASIL
+                                // ---------------------------------
+
+                                uploadedFiles.add(
+                                    fileName
+                                )
+
+                                Timber.tag("DriveUpload")
+                                    .d(
+                                        "SUCCESS: $fileName"
+                                    )
+
+                                updateProgress()
+
+                            } catch (e: Exception) {
+
+                                failedFiles.add(
+                                    fileName
+                                )
+
+                                Timber.tag("DriveUpload")
+                                    .e(
+                                        e,
+                                        "FAILED: $fileName"
+                                    )
+
+                            } finally {
+
+                                // ---------------------------------
+                                // HAPUS FILE CACHE
+                                // ---------------------------------
+
+                                try {
+                                    tempFile?.delete()
+                                } catch (e: Exception) {
+                                    Timber.e(
+                                        e,
+                                        "Gagal hapus cache"
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                }.awaitAll()
+            }
+
+            // -----------------------------------------------------
+            // 10. CEK HASIL
+            // -----------------------------------------------------
+
+            if (failedFiles.isNotEmpty()) {
+
+                Timber.tag("DriveUpload")
+                    .e(
+                        "Upload gagal: ${failedFiles.size} file"
+                    )
+
+                Timber.tag("DriveUpload")
+                    .e(
+                        "File gagal = $failedFiles"
+                    )
+
+                /*
+                 * WorkManager akan menjalankan ulang Worker.
+                 *
+                 * File yang sudah berhasil akan ditemukan
+                 * di Drive dan otomatis di-SKIP.
+                 */
+                showFinalNotification(
+                    false,
+                    "${failedFiles.size} foto gagal, mencoba lagi..."
+                )
+
+                return Result.retry()
+            }
+
+            // -----------------------------------------------------
+            // 11. SEMUA SELESAI
+            // -----------------------------------------------------
+
+            Timber.tag("DriveUpload")
+                .d(
+                    "=== SEMUA UPLOAD SELESAI ==="
+                )
+
+            showFinalNotification(
+                true,
+                "Upload selesai $totalFiles foto"
+            )
+
             Result.success()
 
         } catch (e: GoogleJsonResponseException) {
@@ -181,59 +475,124 @@ class DriveUploadWorker @AssistedInject constructor(
 
                 401 -> {
 
-                    Timber.e("Access Token expired di tengah upload")
+                    Timber.e(
+                        e,
+                        "Access Token expired"
+                    )
 
-                    val currentToken = preferences.driveAccessToken.first()
+                    val currentToken =
+                        preferences.driveAccessToken.first()
 
                     Timber.tag("DriveToken")
-                        .d("Worker Token = ${token.takeLast(5)}")
+                        .d(
+                            "Worker Token = ${
+                                token.takeLast(5)
+                            }"
+                        )
 
                     Timber.tag("DriveToken")
-                        .d("DataStore Token = ${currentToken.takeLast(5)}")
+                        .d(
+                            "DataStore Token = ${
+                                currentToken.takeLast(5)
+                            }"
+                        )
 
                     if (currentToken != token) {
+
                         Result.retry()
+
                     } else {
-                        showFinalNotification(false, "Token Google Drive sudah kedaluwarsa")
+
+                        showFinalNotification(
+                            false,
+                            "Token Google Drive sudah kedaluwarsa"
+                        )
+
                         Result.failure()
                     }
                 }
 
                 403 -> {
-                    showFinalNotification(false, "Permission denied")
+
+                    showFinalNotification(
+                        false,
+                        "Permission denied"
+                    )
+
                     Result.failure()
                 }
 
                 404 -> {
-                    showFinalNotification(false, "Folder tidak ditemukan")
+
+                    showFinalNotification(
+                        false,
+                        "Folder tidak ditemukan"
+                    )
+
                     Result.failure()
                 }
 
-                else -> Result.retry()
+                else -> {
+
+                    Timber.e(
+                        e,
+                        "Google Drive error ${e.statusCode}"
+                    )
+
+                    Result.retry()
+                }
             }
 
         } catch (e: Exception) {
 
-            Timber.e(e)
+            Timber.e(
+                e,
+                "Drive upload error"
+            )
+
             Result.retry()
         }
     }
-    private fun createForegroundInfo(progress: String): ForegroundInfo {
-        val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
-            .setContentTitle("Photo Zaidun - Uploading")
-            .setTicker("Mengunggah ke Drive")
-            .setContentText(progress)
-            .setSmallIcon(android.R.drawable.stat_sys_upload)
-            .setOngoing(true)
-            .build()
 
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+    // =============================================================
+    // FOREGROUND NOTIFICATION
+    // =============================================================
+
+    private fun createForegroundInfo(
+        progress: String
+    ): ForegroundInfo {
+
+        val notification =
+            NotificationCompat.Builder(
+                applicationContext,
+                CHANNEL_ID
+            )
+                .setContentTitle(
+                    "WaterMark Pro - Uploading"
+                )
+                .setTicker(
+                    "Mengunggah ke Google Drive"
+                )
+                .setContentText(progress)
+                .setSmallIcon(
+                    android.R.drawable.stat_sys_upload
+                )
+                .setOngoing(true)
+                .build()
+
+        return if (
+            Build.VERSION.SDK_INT >=
+            Build.VERSION_CODES.Q
+        ) {
+
             ForegroundInfo(
                 NOTIFICATION_ID,
                 notification,
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             )
+
         } else {
+
             ForegroundInfo(
                 NOTIFICATION_ID,
                 notification
@@ -241,28 +600,64 @@ class DriveUploadWorker @AssistedInject constructor(
         }
     }
 
+    // =============================================================
+    // NOTIFICATION CHANNEL
+    // =============================================================
+
     private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Google Drive Upload",
-            NotificationManager.IMPORTANCE_HIGH
-        ).apply {
-            description = "Status unggah foto ke Google Drive"
-            enableLights(true)
-            setShowBadge(true)
-        }
-        notificationManager.createNotificationChannel(channel)
+
+        val channel =
+            NotificationChannel(
+                CHANNEL_ID,
+                "Google Drive Upload",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+
+                description =
+                    "Status unggah foto ke Google Drive"
+
+                enableLights(true)
+                setShowBadge(true)
+            }
+
+        notificationManager
+            .createNotificationChannel(channel)
     }
 
-    private fun showFinalNotification(success: Boolean, message: String) {
-        val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
-            .setContentTitle(if (success) "Upload Selesai" else "Upload Gagal")
-            .setContentText(message)
-            .setSmallIcon(if (success) android.R.drawable.stat_sys_upload_done else android.R.drawable.stat_notify_error)
-            .setAutoCancel(false)
-            .setOngoing(false)
-            .build()
+    // =============================================================
+    // FINAL NOTIFICATION
+    // =============================================================
 
-        notificationManager.notify(NOTIFICATION_ID + 1, notification)
+    private fun showFinalNotification(
+        success: Boolean,
+        message: String
+    ) {
+
+        val notification =
+            NotificationCompat.Builder(
+                applicationContext,
+                CHANNEL_ID
+            )
+                .setContentTitle(
+                    if (success)
+                        "Upload Selesai"
+                    else
+                        "Upload Gagal"
+                )
+                .setContentText(message)
+                .setSmallIcon(
+                    if (success)
+                        android.R.drawable.stat_sys_upload_done
+                    else
+                        android.R.drawable.stat_notify_error
+                )
+                .setAutoCancel(false)
+                .setOngoing(false)
+                .build()
+
+        notificationManager.notify(
+            NOTIFICATION_ID + 1,
+            notification
+        )
     }
 }

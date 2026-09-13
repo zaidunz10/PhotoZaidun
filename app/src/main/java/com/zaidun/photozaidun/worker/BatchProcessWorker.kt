@@ -38,6 +38,7 @@ class BatchProcessWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val preferences: UserPreferencesDataStore,
 ) : CoroutineWorker(context, params) {
+    private val outputFileLock = Any()
     override suspend fun doWork(): Result {
         Timber.tag("WORKER").d("Worker ID = $id")
         val workerStart = System.currentTimeMillis()
@@ -47,7 +48,7 @@ class BatchProcessWorker @AssistedInject constructor(
         }
         logStep("Worker Started")
 
-        val parallelism = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(2, 4)
+        val parallelism = (Runtime.getRuntime().availableProcessors()).coerceIn(8, 12)
         val semaphore = Semaphore(parallelism)
         try {
             setForeground(createForegroundInfo("Menyiapkan pemrosesan..."))
@@ -199,14 +200,28 @@ class BatchProcessWorker @AssistedInject constructor(
                         async {
                             semaphore.withPermit {
                                 if (isStopped) return@withPermit
-                                val outputFileName = generateNewName(file.name, suffix)
-                                if (outputFileName in existingFiles) {
-                                    return@withPermit
+                                val outputFileName: String
+                                val outputFile: DocumentFile?
+
+                                synchronized(outputFileLock) {
+
+                                    val generatedName =
+                                        generateNewName(file.name, suffix)
+
+                                    if (generatedName in existingFiles) {
+                                        return@withPermit
+                                    }
+
+                                    existingFiles.add(generatedName)
+
+                                    outputFile =
+                                        currentOutputFolder?.createFile(
+                                            file.mime,
+                                            generatedName
+                                        )
+
+                                    outputFileName = generatedName
                                 }
-                                val outputFile = currentOutputFolder?.createFile(
-                                    file.mime,
-                                    outputFileName
-                                )
                                 outputFile?.uri?.let { outUri ->
                                     applicationContext.contentResolver.openOutputStream(outUri)
                                         ?.use { outStream ->
