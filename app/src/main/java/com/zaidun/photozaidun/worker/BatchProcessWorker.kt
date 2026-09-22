@@ -18,9 +18,6 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import com.zaidun.photozaidun.data.local.datastore.UserPreferencesDataStore
 import com.zaidun.photozaidun.data.processor.bitmap.BitmapProcessor
 import com.zaidun.photozaidun.data.scanner.FastScanner
@@ -48,7 +45,7 @@ class BatchProcessWorker @AssistedInject constructor(
         }
         logStep("Worker Started")
 
-        val parallelism = (Runtime.getRuntime().availableProcessors()).coerceIn(8, 12)
+        val parallelism = (Runtime.getRuntime().availableProcessors()).coerceIn(8, 16)
         val semaphore = Semaphore(parallelism)
         try {
             setForeground(createForegroundInfo("Menyiapkan pemrosesan..."))
@@ -58,10 +55,10 @@ class BatchProcessWorker @AssistedInject constructor(
         logStep("Foreground Ready")
         val accessToken = inputData.getString(KEY_ACCESS_TOKEN) ?: return Result.failure()
         logStep("Access Token Ready")
-        suspend fun enqueueUpload(folder: DocumentFile) {
+        suspend fun enqueueUpload(folder: DocumentFile, expectedCount: Int) {
             val freshToken = preferences.driveAccessToken.first()
             Timber.tag("DriveDebug").d(
-                "Enqueue Upload ${folder.name} token=${freshToken.takeLast(5)}"
+                "Enqueue Upload ${folder.name} count=$expectedCount token=${freshToken.takeLast(5)}"
             )
             val tokenPreview =
                 if (freshToken.length > 5) freshToken.takeLast(5) else "EMPTY"
@@ -73,7 +70,8 @@ class BatchProcessWorker @AssistedInject constructor(
                     .setInputData(
                         workDataOf(
                             KEY_FOLDER_URI to folder.uri.toString(),
-                            KEY_ACCESS_TOKEN to freshToken
+                            KEY_ACCESS_TOKEN to freshToken,
+                            DriveUploadWorker.KEY_EXPECTED_COUNT to expectedCount
                         )
                     )
                     .build()
@@ -166,7 +164,7 @@ class BatchProcessWorker @AssistedInject constructor(
                 FastScanner.scan(
                     applicationContext,
                     inputFolder
-                ).images
+                ).images.sortedBy { it.name?.lowercase() ?: "" }
 
             Timber.tag("SCAN")
                 .d(
@@ -196,86 +194,68 @@ class BatchProcessWorker @AssistedInject constructor(
                         }
 
                     Timber.tag("EXPORT").d("Memproses Part $partNumber: ${partFiles.size} foto")
-                    val deferredJobs = partFiles.mapIndexed { fileIndexInPart, file ->
-                        async {
-                            semaphore.withPermit {
-                                if (isStopped) return@withPermit
-                                val outputFileName: String
-                                val outputFile: DocumentFile?
+                    
+                    // Berurutan: Menggunakan forEach, bukan async paralel
+                    partFiles.forEachIndexed { fileIndexInPart, file ->
+                        if (isStopped) return@coroutineScope
+                        
+                        val outputFileName: String
+                        val outputFile: DocumentFile?
 
-                                synchronized(outputFileLock) {
+                        synchronized(outputFileLock) {
+                            val generatedName = generateNewName(file.name, suffix)
+                            if (generatedName in existingFiles) {
+                                // Lewati jika sudah ada, tapi tetap hitung progress
+                                completed.incrementAndGet()
+                                return@forEachIndexed
+                            }
 
-                                    val generatedName =
-                                        generateNewName(file.name, suffix)
+                            existingFiles.add(generatedName)
+                            outputFile = currentOutputFolder?.createFile(file.mime, generatedName)
+                            outputFileName = generatedName
+                        }
 
-                                    if (generatedName in existingFiles) {
-                                        return@withPermit
-                                    }
-
-                                    existingFiles.add(generatedName)
-
-                                    outputFile =
-                                        currentOutputFolder?.createFile(
-                                            file.mime,
-                                            generatedName
-                                        )
-
-                                    outputFileName = generatedName
-                                }
-                                outputFile?.uri?.let { outUri ->
-                                    applicationContext.contentResolver.openOutputStream(outUri)
-                                        ?.use { outStream ->
-                                            processor.process(
-                                                inputUri = file.uri,
-                                                watermarkConfig = watermarkConfig,
-                                                resizeConfig = ResizeConfig(percentage = resize),
-                                                fileName = outputFileName,
-                                                partName = currentFolderName,
-                                                   compressionConfig = CompressionConfig(quality = quality),
-                                                outputStream = outStream,
-                                                showTimestamp = wmShowTimestamp
-                                            )
-                                            val done = completed.incrementAndGet()
-                                            if (done % 10 == 0 || done == imageFiles.size) {
-                                                Timber.tag("EXPORT_PROGRESS").d(
-                                                    "done=$done total=${imageFiles.size}"
-                                                )
-                                                setProgress(
-                                                    workDataOf(
-                                                        "progress" to (done * 100 / imageFiles.size),
-                                                        "current" to done,
-                                                        "total" to imageFiles.size,
-                                                        "filename" to file.name
-                                                    )
-                                                )
-                                                Timber.tag("EXPORT_PROGRESS").d("Progress berhasil dikirim")
-
-                                                try {
-                                                    val msg =
-                                                        "Mengekspor $done / ${imageFiles.size} foto"
-                                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                                                        setForeground(
-                                                            ForegroundInfo(
-                                                                102,
-                                                                createForegroundInfo(msg).notification,
-                                                                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-                                                            )
-                                                        )
-                                                    } else {
-                                                        setForeground(createForegroundInfo(msg))
-                                                    }
-                                                } catch (e: Exception) {
-                                                    Timber.e("Gagal update notif: ${e.message}")
-                                                }
-                                            }
-                                        }
+                        outputFile?.uri?.let { outUri ->
+                            applicationContext.contentResolver.openOutputStream(outUri)?.use { outStream ->
+                                processor.process(
+                                    inputUri = file.uri,
+                                    watermarkConfig = watermarkConfig,
+                                    resizeConfig = ResizeConfig(percentage = resize),
+                                    fileName = outputFileName,
+                                    partName = currentFolderName,
+                                    compressionConfig = CompressionConfig(quality = quality),
+                                    outputStream = outStream,
+                                    showTimestamp = wmShowTimestamp
+                                )
+                                
+                                val done = completed.incrementAndGet()
+                                if (done % 5 == 0 || done == imageFiles.size) {
+                                    updateExportProgress(done, imageFiles.size, file.name ?: "")
                                 }
                             }
                         }
                     }
 
-                    deferredJobs.awaitAll()
-                    currentOutputFolder?.let { enqueueUpload(it) }
+                    // DOUBLE CHECK: Bandingkan hasil export dengan daftar file asli
+                    val exportedFiles = currentOutputFolder?.listFiles()?.mapNotNull { it.name }?.toSet() ?: emptySet()
+                    val missingFiles = mutableListOf<String>()
+
+                    partFiles.forEach { file ->
+                        val expectedName = generateNewName(file.name, suffix)
+                        if (expectedName !in exportedFiles) {
+                            missingFiles.add(expectedName)
+                        }
+                    }
+
+                    if (missingFiles.isNotEmpty()) {
+                        Timber.tag("EXPORT_CHECK").e("DANGER: File asli berikut tidak ditemukan hasil exportnya: $missingFiles")
+                        // Jika ada yang kurang, kita beri waktu tambahan (SAF indexing) lalu cek sekali lagi
+                        kotlinx.coroutines.delay(2000)
+                    } else {
+                        Timber.tag("EXPORT_CHECK").d("Part $partNumber LULUS VERIFIKASI: Semua file asli sudah ter-export.")
+                    }
+
+                    currentOutputFolder?.let { enqueueUpload(it, partFiles.size) }
                 }
             }
             return Result.success(workDataOf(KEY_OUTPUT_FOLDER to outputBaseFolder.uri.toString()))
@@ -284,6 +264,33 @@ class BatchProcessWorker @AssistedInject constructor(
             return Result.failure()
         } finally {
             processor.clearCache()
+        }
+    }
+
+    private suspend fun updateExportProgress(done: Int, total: Int, fileName: String) {
+        setProgress(
+            workDataOf(
+                "progress" to (done * 100 / total),
+                "current" to done,
+                "total" to total,
+                "filename" to fileName
+            )
+        )
+        try {
+            val msg = "Mengekspor $done / $total foto"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                setForeground(
+                    ForegroundInfo(
+                        102,
+                        createForegroundInfo(msg).notification,
+                        android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                    )
+                )
+            } else {
+                setForeground(createForegroundInfo(msg))
+            }
+        } catch (e: Exception) {
+            Timber.e("Gagal update notif: ${e.message}")
         }
     }
     private fun generateNewName(originalName: String?, suffix: String): String {

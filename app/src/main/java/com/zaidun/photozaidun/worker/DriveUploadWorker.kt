@@ -22,8 +22,6 @@ import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.supervisorScope
@@ -49,6 +47,7 @@ class DriveUploadWorker @AssistedInject constructor(
 
         const val KEY_FOLDER_URI = "folder_uri"
         const val KEY_ACCESS_TOKEN = "access_token"
+        const val KEY_EXPECTED_COUNT = "expected_count"
 
         private const val CHANNEL_ID = "drive_upload_channel"
         private const val NOTIFICATION_ID = 101
@@ -184,17 +183,34 @@ class DriveUploadWorker @AssistedInject constructor(
                 )
 
             // -----------------------------------------------------
-            // 5. AMBIL SEMUA FOTO LOKAL
+            // 5. AMBIL SEMUA FOTO LOKAL (DENGAN STRICT CHECK & SORT)
             // -----------------------------------------------------
 
-            val filesToUpload =
-                folder.listFiles()
-                    .filter {
-                        it.type?.startsWith("image/") == true
-                    }
+            val expectedCount = inputData.getInt(KEY_EXPECTED_COUNT, -1)
+            var filesToUpload = folder.listFiles()
+                .filter { it.type?.startsWith("image/") == true }
+                .sortedBy { it.name?.lowercase() ?: "" }
 
-            val totalFiles =
-                filesToUpload.size
+            if (expectedCount > 0 && filesToUpload.size < expectedCount) {
+                Timber.tag("DriveUpload").w("File belum lengkap: ${filesToUpload.size}/$expectedCount. Menunggu...")
+                
+                var attempts = 0
+                while (attempts < 8 && filesToUpload.size < expectedCount) {
+                    kotlinx.coroutines.delay(3000) 
+                    filesToUpload = folder.listFiles()
+                        .filter { it.type?.startsWith("image/") == true }
+                        .sortedBy { it.name?.lowercase() ?: "" }
+                    attempts++
+                    Timber.tag("DriveUpload").d("Retry indexing ke-$attempts: ${filesToUpload.size}/$expectedCount")
+                }
+                
+                if (filesToUpload.size < expectedCount) {
+                    Timber.tag("DriveUpload").e("Gagal: File tetap tidak lengkap setelah 8 kali coba.")
+                    return Result.retry() 
+                }
+            }
+
+            val totalFiles = filesToUpload.size
 
             if (totalFiles == 0) {
 
@@ -309,147 +325,69 @@ class DriveUploadWorker @AssistedInject constructor(
                 }
             }
 
-            // -----------------------------------------------------
-            // 9. UPLOAD 20 PARALEL
-            // -----------------------------------------------------
-
             supervisorScope {
-
                 pendingFiles.map { document ->
-
                     async(Dispatchers.IO) {
-
                         semaphore.withPermit {
+                            if (isStopped) return@withPermit
 
-                            val fileName =
-                                document.name
-                                    ?: "unknown.jpg"
+                            val fileName = document.name ?: "unknown.jpg"
 
-                            /*
-                             * Double check.
-                             *
-                             * Bisa saja file sudah masuk Drive
-                             * sebelum coroutine ini mulai.
-                             */
-                            if (
-                                uploadedFiles.contains(
-                                    fileName
-                                )
-                            ) {
-
-                                Timber.tag("DriveUpload")
-                                    .d(
-                                        "SKIP: $fileName"
-                                    )
-
+                            // Double check dari cache lokal worker
+                            if (uploadedFiles.contains(fileName)) {
+                                Timber.tag("DriveUpload").d("SKIP: $fileName")
                                 return@withPermit
                             }
 
-                            Timber.tag("DriveUpload")
-                                .d(
-                                    "START: $fileName"
-                                )
+                            Timber.tag("DriveUpload").d("START UPLOAD: $fileName")
 
-                            var tempFile: java.io.File? =
-                                null
-
+                            var tempCacheFile: java.io.File? = null
                             try {
-
-                                // ---------------------------------
-                                // COPY KE CACHE
-                                // ---------------------------------
-
-                                tempFile =
-                                    document.copyToCache(
-                                        applicationContext
-                                    )
-
-                                // ---------------------------------
-                                // UPLOAD
-                                // ---------------------------------
+                                tempCacheFile = document.copyToCache(applicationContext)
 
                                 repository.uploadFile(
                                     drive = drive,
-                                    localFile = tempFile,
-                                    parentFolderId =
-                                        partFolderId
+                                    localFile = tempCacheFile,
+                                    parentFolderId = partFolderId
                                 )
 
-                                // ---------------------------------
-                                // BERHASIL
-                                // ---------------------------------
-
-                                uploadedFiles.add(
-                                    fileName
-                                )
-
-                                Timber.tag("DriveUpload")
-                                    .d(
-                                        "SUCCESS: $fileName"
-                                    )
-
+                                uploadedFiles.add(fileName)
                                 updateProgress()
+                                Timber.tag("DriveUpload").d("SUCCESS UPLOAD: $fileName")
 
                             } catch (e: Exception) {
-
-                                failedFiles.add(
-                                    fileName
-                                )
-
-                                Timber.tag("DriveUpload")
-                                    .e(
-                                        e,
-                                        "FAILED: $fileName"
-                                    )
-
+                                failedFiles.add(fileName)
+                                Timber.tag("DriveUpload").e(e, "FAILED UPLOAD: $fileName")
                             } finally {
-
-                                // ---------------------------------
-                                // HAPUS FILE CACHE
-                                // ---------------------------------
-
                                 try {
-                                    tempFile?.delete()
+                                    tempCacheFile?.delete()
                                 } catch (e: Exception) {
-                                    Timber.e(
-                                        e,
-                                        "Gagal hapus cache"
-                                    )
                                 }
                             }
                         }
                     }
-
                 }.awaitAll()
             }
 
             // -----------------------------------------------------
-            // 10. CEK HASIL
+            // 10. VERIFIKASI AKHIR: Bandingkan Drive vs Folder Export
             // -----------------------------------------------------
 
-            if (failedFiles.isNotEmpty()) {
+            val finalDriveFiles = repository.getAllFileNames(drive, partFolderId)
+            val missingOnDrive = filesToUpload.filter { it.name != null && !finalDriveFiles.contains(it.name) }
 
-                Timber.tag("DriveUpload")
-                    .e(
-                        "Upload gagal: ${failedFiles.size} file"
-                    )
-
-                Timber.tag("DriveUpload")
-                    .e(
-                        "File gagal = $failedFiles"
-                    )
-
-                /*
-                 * WorkManager akan menjalankan ulang Worker.
-                 *
-                 * File yang sudah berhasil akan ditemukan
-                 * di Drive dan otomatis di-SKIP.
-                 */
+            if (missingOnDrive.isNotEmpty()) {
+                Timber.tag("DriveUpload").e("VERIFIKASI GAGAL: Ada file di folder export yang belum masuk ke Drive: ${missingOnDrive.map { it.name }}")
+                
                 showFinalNotification(
                     false,
-                    "${failedFiles.size} foto gagal, mencoba lagi..."
+                    "Gagal: ${missingOnDrive.size} foto tidak terupload sempurna. Mengulang..."
                 )
+                return Result.retry()
+            }
 
+            if (failedFiles.isNotEmpty()) {
+                Timber.tag("DriveUpload").e("Upload selesai dengan error: $failedFiles")
                 return Result.retry()
             }
 
