@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
     alias(libs.plugins.kotlin.serialization)
+    id("com.google.gms.google-services")
 }
 
 val localProperties = Properties()
@@ -53,7 +54,8 @@ android {
 
         release {
 
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
 
             proguardFiles(
                 getDefaultProguardFile(
@@ -102,6 +104,12 @@ android {
         resolutionStrategy {
             force("androidx.concurrent:concurrent-futures:1.2.0")
             force("androidx.concurrent:concurrent-futures-ktx:1.2.0")
+            force("io.grpc:grpc-okhttp:1.62.2")
+            force("io.grpc:grpc-android:1.62.2")
+            force("io.grpc:grpc-protobuf-lite:1.62.2")
+            force("io.grpc:grpc-stub:1.62.2")
+            force("io.grpc:grpc-core:1.62.2")
+            force("io.grpc:grpc-api:1.62.2")
         }
     }
 }
@@ -168,6 +176,12 @@ dependencies {
     implementation(libs.androidx.credentials.play.services.auth)
 
     implementation(libs.googleid)
+
+    // Firebase Firestore for User Activity Logging (Email, Name, Login/Logout Time)
+    implementation(platform("com.google.firebase:firebase-bom:33.9.0"))
+    implementation("com.google.firebase:firebase-firestore")
+    implementation("io.grpc:grpc-okhttp:1.62.2")
+    implementation("io.grpc:grpc-android:1.62.2")
 
     testImplementation(libs.junit)
 

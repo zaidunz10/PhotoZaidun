@@ -19,6 +19,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import kotlinx.coroutines.sync.Semaphore
 import com.zaidun.photozaidun.data.local.datastore.UserPreferencesDataStore
+import com.zaidun.photozaidun.data.remote.UserLogger
 import com.zaidun.photozaidun.data.processor.bitmap.BitmapProcessor
 import com.zaidun.photozaidun.data.scanner.FastScanner
 import com.zaidun.photozaidun.domain.model.*
@@ -176,6 +177,16 @@ class BatchProcessWorker @AssistedInject constructor(
                 "listFiles() selesai dalam ${System.currentTimeMillis() - listStart} ms"
             )
             logStep("Image List Loaded")
+
+            // Catat log export ke Firebase Firestore (Koleksi export_logs)
+            val email = preferences.userEmail.first()
+            val name = preferences.userName.first()
+            UserLogger.logExport(
+                email.ifBlank { "Guest" },
+                name.ifBlank { "Guest User" },
+                imageFiles.size
+            )
+
             kotlinx.coroutines.coroutineScope {
                 val parts = imageFiles.chunked(maxPhotos)
                 parts.forEachIndexed { partIndex, partFiles ->

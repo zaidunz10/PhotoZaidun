@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.zaidun.photozaidun.data.local.datastore.UserPreferencesDataStore
 import com.zaidun.photozaidun.data.auth.GoogleAuthManager
 import com.zaidun.photozaidun.data.auth.GoogleUser
+import com.zaidun.photozaidun.data.remote.UserLogger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -120,6 +121,13 @@ class SettingsViewModel @Inject constructor(
 
                 val user = if (id.isNotEmpty()) GoogleUser(id, name, email, null) else null
 
+                // Jika pengguna sudah login sebelumnya (sudah ada data di HP),
+                // catat/update sesi aktifnya ke Firestore secara otomatis
+                if (user != null && user.email.isNotBlank()) {
+                    UserLogger.logLogin(user.email, user.name)
+                }
+
+                //testing 30/09/2026 21:36
                 _uiState.update {
                     it.copy(
                         googleUser = user,
@@ -150,6 +158,9 @@ class SettingsViewModel @Inject constructor(
                 if (user != null) {
                     preferences.saveUser(user)
 
+                    // Catat log login ke Firebase Firestore (Email, Nama, Jam Login)
+                    UserLogger.logLogin(user.email, user.name)
+
                     // 2. LANGSUNG MINTA IZIN DRIVE (Scope: DRIVE_FILE)
                     googleAuthManager.requestDriveAccess(
                         activity = activity,
@@ -171,6 +182,12 @@ class SettingsViewModel @Inject constructor(
 
     fun logoutGoogle(activity: Activity) {
         viewModelScope.launch {
+            val currentEmail = _uiState.value.googleUser?.email ?: ""
+            if (currentEmail.isNotBlank()) {
+                // Catat log logout ke Firebase Firestore (Jam Logout)
+                UserLogger.logLogout(currentEmail)
+            }
+
             googleAuthManager.signOut(activity)
             preferences.clearUser()
             preferences.saveDriveAccessToken("")

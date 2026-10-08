@@ -376,6 +376,7 @@ fun HomeScreen(
             // Tombol Export — elemen paling menonjol
             PressAnimatedButton(
                 onClick = {
+                    viewModel.onStartExportClicked()
                     activity?.let { activity ->
                         viewModel.refreshTokenForUpload(activity) { token ->
                             viewModel.prepareExport(token)

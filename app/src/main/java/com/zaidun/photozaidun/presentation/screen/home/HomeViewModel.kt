@@ -9,6 +9,7 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import androidx.lifecycle.viewModelScope
 import com.zaidun.photozaidun.data.local.datastore.UserPreferencesDataStore
+import com.zaidun.photozaidun.data.remote.UserLogger
 import com.zaidun.photozaidun.worker.BatchProcessWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,6 +55,21 @@ class HomeViewModel @Inject constructor(
     private var currentWorkId: UUID? = null
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            launch {
+                preferences.userEmail.collect { email ->
+                    _uiState.update { it.copy(userEmail = email) }
+                }
+            }
+            launch {
+                preferences.userName.collect { name ->
+                    _uiState.update { it.copy(userName = name) }
+                }
+            }
+        }
+    }
     private fun observeCurrentWorker() {
 
         val id = currentWorkId ?: return
@@ -176,6 +192,7 @@ class HomeViewModel @Inject constructor(
                 val inputUri = _uiState.value.selectedFolder
 
                 if (inputUri.isNotEmpty()) {
+                    triggerExportLog()
 
                     val request = OneTimeWorkRequestBuilder<BatchProcessWorker>()
                         .addTag("EXPORT")
@@ -364,6 +381,18 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    private fun triggerExportLog() {
+        val email = _uiState.value.userEmail
+        val name = _uiState.value.userName
+        val total = _uiState.value.totalImages
+        Timber.tag("UserLogger").d("Trigger Export Log: email=$email, name=$name, total=$total")
+        UserLogger.logExport(email, name, total)
+    }
+
+    fun onStartExportClicked() {
+        triggerExportLog()
+    }
+
     fun startBatchProcess(accessToken: String) {
         // PERBAIKAN INDENTASI & GUARD
         if (_uiState.value.isProcessing) {
@@ -372,6 +401,7 @@ class HomeViewModel @Inject constructor(
         }
 
         Timber.tag("EXPORT").e("========== START BATCH ==========")
+        triggerExportLog()
         // ... (update uiState tetap sama) ...
 
         val request = OneTimeWorkRequestBuilder<BatchProcessWorker>()

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1099286053551",
+    "project_id": "photozaidun-6fd76165",
+    "storage_bucket": "photozaidun-6fd76165.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1099286053551:android:1d11072e6689dea1c1ca5a",
+        "android_client_info": {
+          "package_name": "com.zaidun.photozaidun"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDXqbSTnUDqTSjPLr-QDPAmpsSXd2hklwE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -27,5 +27,7 @@ data class HomeUiState(
     val total: Int = 0,
     val driveStorage: DriveStorageInfo? = null,
 
-    val loadingDriveStorage: Boolean = false
+    val loadingDriveStorage: Boolean = false,
+    val userEmail: String = "",
+    val userName: String = ""
 )
