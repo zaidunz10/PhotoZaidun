@@ -96,6 +96,8 @@ class SettingsViewModel @Inject constructor(
                 preferences.userId,
                 preferences.userName,
                 preferences.userEmail,
+                preferences.photographerWa,
+                preferences.photographerIg,
                 preferences.rootFolder,
                 preferences.folderLevels,
                 preferences.partFolder,
@@ -109,15 +111,17 @@ class SettingsViewModel @Inject constructor(
                 val id = args[0] as String
                 val name = args[1] as String
                 val email = args[2] as String
-                val root = args[3] as String
-                val folderLevels = args[4] as List<*>
-                val part = args[5] as String
-                val suffix = args[6] as String
-                val resize = args[7] as Int
-                val max = args[8] as Int
-                val auto = args[9] as Boolean
-                val token = args[10] as String
-                val startPart = args[11] as Int
+                val wa = args[3] as String
+                val ig = args[4] as String
+                val root = args[5] as String
+                val folderLevels = args[6] as List<*>
+                val part = args[7] as String
+                val suffix = args[8] as String
+                val resize = args[9] as Int
+                val max = args[10] as Int
+                val auto = args[11] as Boolean
+                val token = args[12] as String
+                val startPart = args[13] as Int
 
                 val user = if (id.isNotEmpty()) GoogleUser(id, name, email, null) else null
 
@@ -131,6 +135,8 @@ class SettingsViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         googleUser = user,
+                        photographerWa = wa,
+                        photographerIg = ig,
                         driveConnected = token.isNotBlank(),
                         rootFolder = root,
                         folderLevels = folderLevels.filterIsInstance<FolderLevel>(),
@@ -177,6 +183,14 @@ class SettingsViewModel @Inject constructor(
             } catch (e: Exception) {
                 onError(e)
             }
+        }
+    }
+
+    fun savePhotographerProfile(wa: String, ig: String) {
+        viewModelScope.launch {
+            // Kita simpan di DataStore juga jika diperlukan nantinya untuk cek kelengkapan
+            preferences.savePhotographerWa(wa)
+            preferences.savePhotographerIg(ig)
         }
     }
 

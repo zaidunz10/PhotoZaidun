@@ -28,6 +28,10 @@ data class HomeUiState(
     val driveStorage: DriveStorageInfo? = null,
 
     val loadingDriveStorage: Boolean = false,
+    val userId: String = "",
     val userEmail: String = "",
-    val userName: String = ""
+    val userName: String = "",
+    val photographerWa: String = "",
+    val photographerIg: String = "",
+    val showLocationDialog: Boolean = false
 )

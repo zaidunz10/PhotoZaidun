@@ -34,6 +34,8 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
         private val ROOT_FOLDER = stringPreferencesKey("root_folder")
         private val PART_FOLDER = stringPreferencesKey("part_folder")
         private val FILE_SUFFIX = stringPreferencesKey("file_suffix")
+        private val PHOTOGRAPHER_WA = stringPreferencesKey("photographer_wa")
+        private val PHOTOGRAPHER_IG = stringPreferencesKey("photographer_ig")
         private val FOLDER_DISPLAY_NAME = stringPreferencesKey("folder_display_name")
         private val MAX_PHOTO_PER_FOLDER = intPreferencesKey("max_photo_per_folder")
         private val WATERMARK_URI = stringPreferencesKey("watermark_uri")
@@ -62,6 +64,8 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
     val userId: Flow<String> = context.dataStore.data.map { it[USER_ID_KEY] ?: "" }
     val userName: Flow<String> = context.dataStore.data.map { it[USER_NAME_KEY] ?: "" }
     val userEmail: Flow<String> = context.dataStore.data.map { it[USER_EMAIL_KEY] ?: "" }
+    val photographerWa: Flow<String> = context.dataStore.data.map { it[PHOTOGRAPHER_WA] ?: "" }
+    val photographerIg: Flow<String> = context.dataStore.data.map { it[PHOTOGRAPHER_IG] ?: "" }
     val folderLevels: Flow<List<FolderLevel>> =
         context.dataStore.data.map { preferences ->
 
@@ -162,6 +166,8 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
     suspend fun savePartFolder(value: String) {
         context.dataStore.edit { it[PART_FOLDER] = value }
     }
+    suspend fun savePhotographerWa(value: String) { context.dataStore.edit { it[PHOTOGRAPHER_WA] = value } }
+    suspend fun savePhotographerIg(value: String) { context.dataStore.edit { it[PHOTOGRAPHER_IG] = value } }
 
     suspend fun saveFileSuffix(value: String) {
         context.dataStore.edit { it[FILE_SUFFIX] = value }

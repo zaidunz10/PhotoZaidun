@@ -23,7 +23,10 @@ import androidx.work.WorkInfo
 import com.zaidun.photozaidun.data.auth.GoogleAuthManager
 import com.zaidun.photozaidun.data.drive.DriveServiceFactory
 import com.zaidun.photozaidun.data.drive.GoogleDriveRepository
+import com.zaidun.photozaidun.data.remote.SessionInsertDto
+import com.zaidun.photozaidun.data.remote.SupabaseHelper
 import com.zaidun.photozaidun.domain.model.PhotoItem
+import io.github.jan.supabase.postgrest.postgrest
 import com.zaidun.photozaidun.worker.DriveUploadWorker.Companion.KEY_ACCESS_TOKEN
 import com.zaidun.photozaidun.worker.KEY_OUTPUT_FOLDER
 import kotlinx.coroutines.flow.first
@@ -58,16 +61,11 @@ class HomeViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            launch {
-                preferences.userEmail.collect { email ->
-                    _uiState.update { it.copy(userEmail = email) }
-                }
-            }
-            launch {
-                preferences.userName.collect { name ->
-                    _uiState.update { it.copy(userName = name) }
-                }
-            }
+            launch { preferences.userId.collect { id -> _uiState.update { it.copy(userId = id) } } }
+            launch { preferences.userEmail.collect { email -> _uiState.update { it.copy(userEmail = email) } } }
+            launch { preferences.userName.collect { name -> _uiState.update { it.copy(userName = name) } } }
+            launch { preferences.photographerWa.collect { wa -> _uiState.update { it.copy(photographerWa = wa) } } }
+            launch { preferences.photographerIg.collect { ig -> _uiState.update { it.copy(photographerIg = ig) } } }
         }
     }
     private fun observeCurrentWorker() {
@@ -389,8 +387,45 @@ class HomeViewModel @Inject constructor(
         UserLogger.logExport(email, name, total)
     }
 
-    fun onStartExportClicked() {
-        triggerExportLog()
+    fun onStartExportClicked(): Boolean {
+        // Cek kelengkapan WA & IG dari DataStore (sebelumnya diisi di ProfileScreen)
+        val wa = _uiState.value.photographerWa
+        val ig = _uiState.value.photographerIg
+        if (wa.isBlank() || ig.isBlank()) {
+            return false // Minta user lengkapi profil dulu
+        }
+        
+        // Profil lengkap, tampilkan dialog lokasi
+        _uiState.update { it.copy(showLocationDialog = true) }
+        return true
+    }
+
+    fun dismissLocationDialog() {
+        _uiState.update { it.copy(showLocationDialog = false) }
+    }
+    
+    fun confirmLocationAndExport(location: String, accessToken: String) {
+        dismissLocationDialog()
+        
+        // Simpan sesi ke Supabase
+        viewModelScope.launch {
+            try {
+                val sessionDto = SessionInsertDto(
+                    photographerId = _uiState.value.userId,
+                    location = location,
+                    whatsappNumber = _uiState.value.photographerWa,
+                    instagramLink = _uiState.value.photographerIg
+                )
+                
+                SupabaseHelper.client.postgrest["sessions"].insert(sessionDto)
+                
+                Timber.d("Supabase: Sesi Fotografer berhasil disimpan.")
+            } catch (e: Exception) {
+                Timber.e(e, "Supabase: Gagal menyimpan sesi fotografer")
+            }
+        }
+        
+        startBatchProcess(accessToken)
     }
 
     fun startBatchProcess(accessToken: String) {
@@ -402,7 +437,6 @@ class HomeViewModel @Inject constructor(
 
         Timber.tag("EXPORT").e("========== START BATCH ==========")
         triggerExportLog()
-        // ... (update uiState tetap sama) ...
 
         val request = OneTimeWorkRequestBuilder<BatchProcessWorker>()
             .addTag("EXPORT")

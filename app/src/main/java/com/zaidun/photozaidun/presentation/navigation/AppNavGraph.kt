@@ -20,12 +20,17 @@ import androidx.compose.animation.SharedTransitionLayout
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import com.zaidun.photozaidun.presentation.screen.preview.PhotoPreviewScreen
+import com.zaidun.photozaidun.presentation.screen.profile.ProfileScreen
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.zaidun.photozaidun.presentation.screen.settings.SettingsViewModel
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun AppNavGraph() {
     val navController = rememberNavController()
     val homeViewModel: HomeViewModel = hiltViewModel()
+    val settingsViewModel: SettingsViewModel = hiltViewModel()
     val sharedFolderViewModel: SharedFolderViewModel = hiltViewModel()
 
     SharedTransitionLayout {
@@ -89,6 +94,17 @@ fun AppNavGraph() {
                     photoUri = photoUri,
                     sharedTransitionScope = this@SharedTransitionLayout,
                     animatedVisibilityScope = this@composable
+                )
+            }
+            
+            composable(Screen.Profile.route) {
+                val settingsUiState by settingsViewModel.uiState.collectAsState()
+                ProfileScreen(
+                    uiState = settingsUiState,
+                    onBack = { navController.popBackStack() },
+                    onSaveSuccess = { wa, ig ->
+                        settingsViewModel.savePhotographerProfile(wa, ig)
+                    }
                 )
             }
         }

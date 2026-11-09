@@ -29,6 +29,16 @@ android {
             "WEB_CLIENT_ID",
             "\"${localProperties.getProperty("WEB_CLIENT_ID") ?: ""}\""
         )
+        buildConfigField(
+            "String",
+            "SUPABASE_URL",
+            "\"${localProperties.getProperty("SUPABASE_URL") ?: ""}\""
+        )
+        buildConfigField(
+            "String",
+            "SUPABASE_ANON_KEY",
+            "\"${localProperties.getProperty("SUPABASE_PUBLISHABLE_KEY") ?: ""}\""
+        )
 
 
         applicationId = "com.zaidun.photozaidun"
@@ -182,6 +192,11 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore")
     implementation("io.grpc:grpc-okhttp:1.62.2")
     implementation("io.grpc:grpc-android:1.62.2")
+
+    // Supabase
+    implementation(libs.supabase.postgrest)
+    implementation(libs.ktor.client.android)
+    implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit)
 

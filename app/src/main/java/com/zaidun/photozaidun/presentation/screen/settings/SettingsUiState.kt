@@ -7,6 +7,8 @@ data class SettingsUiState(
     val googleUser: GoogleUser? = null,
     val loginLoading: Boolean = false,
     val driveConnected: Boolean = false,
+    val photographerWa: String = "",
+    val photographerIg: String = "",
 
     val rootFolder: String = "Photo Zaidun",
     val partFolder: String = "part",

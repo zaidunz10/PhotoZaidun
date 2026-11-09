@@ -19,7 +19,7 @@ ksp = "2.1.21-2.0.1"
 work = "2.10.5"
 coil = "3.3.0"
 datastore = "1.1.7"
-kotlinxSerialization = "2.2.10"
+kotlinxSerialization = "1.7.3"
 exif = "1.4.1"
 coroutines = "1.10.2"
 timber = "5.0.1"
@@ -31,6 +31,8 @@ foundation = "1.7.5"
 uiGraphics = "1.7.5"
 googleServices = "4.4.2"
 firebaseBom = "33.9.0"
+supabase = "3.1.2"
+ktor = "3.0.3"
 
 [libraries]
 androidx-documentfile = { group = "androidx.documentfile", name = "documentfile", version.ref = "documentfile" }
@@ -81,6 +83,9 @@ androidx-compose-foundation = { group = "androidx.compose.foundation", name = "f
 androidx-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore" }
+supabase-postgrest = { group = "io.github.jan-tennert.supabase", name = "postgrest-kt", version.ref = "supabase" }
+ktor-client-android = { group = "io.ktor", name = "ktor-client-android", version.ref = "ktor" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 
 [plugins]
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

@@ -32,6 +32,10 @@ import com.zaidun.photozaidun.presentation.theme.motion.MotionTokens
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.zaidun.photozaidun.presentation.screen.profile.ProfileScreen
+import androidx.compose.runtime.collectAsState
+import com.zaidun.photozaidun.presentation.screen.settings.SettingsViewModel
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -48,6 +52,7 @@ fun MainScreen(
     val items = listOf(
         Screen.Home,
         Screen.Watermark,
+        Screen.Profile,
         Screen.Settings,
         Screen.Contact
     )
@@ -65,6 +70,7 @@ fun MainScreen(
                                 imageVector = when(screen) {
                                     Screen.Home -> Icons.Default.Home
                                     Screen.Watermark -> Icons.Default.Brush
+                                    Screen.Profile -> Icons.Default.Person
                                     Screen.Contact -> Icons.Default.Person
                                     else -> Icons.Default.Settings
                                 },
@@ -123,6 +129,17 @@ fun MainScreen(
             }
             composable(Screen.Watermark.route) {
                 WatermarkSettingsScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Screen.Profile.route) {
+                val settingsViewModel: SettingsViewModel = hiltViewModel()
+                val settingsUiState by settingsViewModel.uiState.collectAsState()
+                ProfileScreen(
+                    uiState = settingsUiState,
+                    onBack = { navController.popBackStack() },
+                    onSaveSuccess = { wa, ig ->
+                        settingsViewModel.savePhotographerProfile(wa, ig)
+                    }
+                )
             }
             composable(Screen.Settings.route) {
                 SettingsScreen(onBack = { navController.popBackStack() })

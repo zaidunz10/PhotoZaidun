@@ -31,6 +31,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import android.widget.Toast
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -114,12 +115,90 @@ fun HomeScreen(
     val photos by sharedFolderViewModel.photos.collectAsState()
     val coroutineScope = rememberCoroutineScope()
 
+    var locationText by remember { mutableStateOf("") }
+    
+    if (uiState.showLocationDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissLocationDialog() },
+            title = { Text("Input Lokasi Hunting") },
+            text = {
+                var expanded by remember { mutableStateOf(false) }
+                val locationSuggestions = listOf("Kawah Putih Ciwidey", "KFC Sukawangi Lembang", "Ranca Upas", "Glamping Lakesides")
+                Column {
+                    Text("Tentukan lokasi hunting Anda sebelum melakukan ekspor.")
+                    Spacer(Modifier.height(16.dp))
+                    
+                    @OptIn(ExperimentalMaterial3Api::class)
+                    ExposedDropdownMenuBox(
+                        expanded = expanded,
+                        onExpandedChange = { expanded = !expanded }
+                    ) {
+                        OutlinedTextField(
+                            value = locationText,
+                            onValueChange = { locationText = it; expanded = true },
+                            label = { Text("Pilih / Ketik Lokasi") },
+                            modifier = Modifier.fillMaxWidth().menuAnchor(),
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            val filteredSuggestions = locationSuggestions.filter { 
+                                it.contains(locationText, ignoreCase = true) 
+                            }
+                            filteredSuggestions.forEach { selectionOption ->
+                                DropdownMenuItem(
+                                    text = { Text(selectionOption) },
+                                    onClick = {
+                                        locationText = selectionOption
+                                        expanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (locationText.isNotBlank()) {
+                            activity?.let { act ->
+                                viewModel.refreshTokenForUpload(act) { token ->
+                                    viewModel.confirmLocationAndExport(locationText.trim(), token)
+                                    onNavigateToExportLoading()
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    Text("Konfirmasi & Export")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissLocationDialog() }) {
+                    Text("Batal")
+                }
+            }
+        )
+    }
+
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
                     Text("Photo Zaidun", fontWeight = FontWeight.Bold, color = DeepPurple)
+                },
+                actions = {
+                    IconButton(onClick = onNavigateToHistory) {
+                        Icon(Icons.Default.Folder, contentDescription = "History", tint = DeepPurple)
+                    }
+                    IconButton(onClick = onNavigateToSettings) {
+                        Icon(Icons.Default.Settings, contentDescription = "Pengaturan", tint = DeepPurple)
+                    }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = Color.Transparent
@@ -376,12 +455,8 @@ fun HomeScreen(
             // Tombol Export — elemen paling menonjol
             PressAnimatedButton(
                 onClick = {
-                    viewModel.onStartExportClicked()
-                    activity?.let { activity ->
-                        viewModel.refreshTokenForUpload(activity) { token ->
-                            viewModel.prepareExport(token)
-                            onNavigateToExportLoading()
-                        }
+                    if (!viewModel.onStartExportClicked()) {
+                        Toast.makeText(context, "Harap lengkapi WA dan Instagram di menu Profil terlebih dahulu!", Toast.LENGTH_LONG).show()
                     }
                 },
                 modifier = Modifier
