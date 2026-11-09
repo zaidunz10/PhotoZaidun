@@ -31,6 +31,7 @@ data class HomeUiState(
     val userId: String = "",
     val userEmail: String = "",
     val userName: String = "",
+    val userPhotoUrl: String = "",
     val photographerWa: String = "",
     val photographerIg: String = "",
     val showLocationDialog: Boolean = false,

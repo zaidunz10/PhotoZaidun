@@ -29,6 +29,7 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
         private val USER_ID_KEY = stringPreferencesKey("user_id")
         private val USER_NAME_KEY = stringPreferencesKey("user_name")
         private val USER_EMAIL_KEY = stringPreferencesKey("user_email")
+        private val USER_PHOTO_URL_KEY = stringPreferencesKey("user_photo_url")
         private val START_PART_NUMBER = intPreferencesKey("start_part_number")
         private val FOLDER_LEVELS = stringPreferencesKey("folder_levels")
         private val ROOT_FOLDER = stringPreferencesKey("root_folder")
@@ -64,6 +65,7 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
     val userId: Flow<String> = context.dataStore.data.map { it[USER_ID_KEY] ?: "" }
     val userName: Flow<String> = context.dataStore.data.map { it[USER_NAME_KEY] ?: "" }
     val userEmail: Flow<String> = context.dataStore.data.map { it[USER_EMAIL_KEY] ?: "" }
+    val userPhotoUrl: Flow<String> = context.dataStore.data.map { it[USER_PHOTO_URL_KEY] ?: "" }
     val photographerWa: Flow<String> = context.dataStore.data.map { it[PHOTOGRAPHER_WA] ?: "" }
     val photographerIg: Flow<String> = context.dataStore.data.map { it[PHOTOGRAPHER_IG] ?: "" }
     val folderLevels: Flow<List<FolderLevel>> =
@@ -146,6 +148,13 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
             it[USER_ID_KEY] = user.id
             it[USER_NAME_KEY] = user.name
             it[USER_EMAIL_KEY] = user.email
+            it[USER_PHOTO_URL_KEY] = user.photoUrl ?: ""
+        }
+    }
+
+    suspend fun saveUserPhotoUrl(url: String) {
+        context.dataStore.edit {
+            it[USER_PHOTO_URL_KEY] = url
         }
     }
     suspend fun saveDriveAccessToken(token: String) {
@@ -159,6 +168,7 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
             it.remove(USER_ID_KEY)
             it.remove(USER_NAME_KEY)
             it.remove(USER_EMAIL_KEY)
+            it.remove(USER_PHOTO_URL_KEY)
         }
     }
 

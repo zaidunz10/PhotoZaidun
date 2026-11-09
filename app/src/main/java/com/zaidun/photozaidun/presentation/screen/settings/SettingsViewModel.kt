@@ -96,6 +96,7 @@ class SettingsViewModel @Inject constructor(
                 preferences.userId,
                 preferences.userName,
                 preferences.userEmail,
+                preferences.userPhotoUrl,
                 preferences.photographerWa,
                 preferences.photographerIg,
                 preferences.rootFolder,
@@ -111,19 +112,20 @@ class SettingsViewModel @Inject constructor(
                 val id = args[0] as String
                 val name = args[1] as String
                 val email = args[2] as String
-                val wa = args[3] as String
-                val ig = args[4] as String
-                val root = args[5] as String
-                val folderLevels = args[6] as List<*>
-                val part = args[7] as String
-                val suffix = args[8] as String
-                val resize = args[9] as Int
-                val max = args[10] as Int
-                val auto = args[11] as Boolean
-                val token = args[12] as String
-                val startPart = args[13] as Int
+                val photoUrl = args[3] as String
+                val wa = args[4] as String
+                val ig = args[5] as String
+                val root = args[6] as String
+                val folderLevels = args[7] as List<*>
+                val part = args[8] as String
+                val suffix = args[9] as String
+                val resize = args[10] as Int
+                val max = args[11] as Int
+                val auto = args[12] as Boolean
+                val token = args[13] as String
+                val startPart = args[14] as Int
 
-                val user = if (id.isNotEmpty()) GoogleUser(id, name, email, null) else null
+                val user = if (id.isNotEmpty()) GoogleUser(id, name, email, photoUrl.ifBlank { null }) else null
 
                 // Jika pengguna sudah login sebelumnya (sudah ada data di HP),
                 // catat/update sesi aktifnya ke Firestore secara otomatis

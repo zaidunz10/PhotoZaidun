@@ -27,6 +27,7 @@ import com.zaidun.photozaidun.data.remote.SessionInsertDto
 import com.zaidun.photozaidun.data.remote.SessionLocationDto
 import com.zaidun.photozaidun.data.remote.SessionResponseDto
 import com.zaidun.photozaidun.data.remote.SupabaseHelper
+import com.zaidun.photozaidun.data.remote.UserDto
 import com.zaidun.photozaidun.domain.model.PhotoItem
 import io.github.jan.supabase.postgrest.postgrest
 import com.zaidun.photozaidun.worker.DriveUploadWorker.Companion.KEY_ACCESS_TOKEN
@@ -65,10 +66,39 @@ class HomeViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             launch { preferences.userId.collect { id -> _uiState.update { it.copy(userId = id) } } }
-            launch { preferences.userEmail.collect { email -> _uiState.update { it.copy(userEmail = email) } } }
+            launch {
+                preferences.userEmail.collect { email ->
+                    _uiState.update { it.copy(userEmail = email) }
+                    if (email.isNotBlank()) {
+                        loadUserProfileFromSupabase(email)
+                    }
+                }
+            }
             launch { preferences.userName.collect { name -> _uiState.update { it.copy(userName = name) } } }
+            launch { preferences.userPhotoUrl.collect { photo -> _uiState.update { it.copy(userPhotoUrl = photo) } } }
             launch { preferences.photographerWa.collect { wa -> _uiState.update { it.copy(photographerWa = wa) } } }
             launch { preferences.photographerIg.collect { ig -> _uiState.update { it.copy(photographerIg = ig) } } }
+        }
+    }
+
+    fun loadUserProfileFromSupabase(email: String) {
+        if (email.isBlank()) return
+        viewModelScope.launch {
+            try {
+                val users = SupabaseHelper.client.postgrest["users"]
+                    .select {
+                        filter { eq("email", email) }
+                    }
+                    .decodeList<UserDto>()
+
+                val user = users.firstOrNull()
+                if (user != null && !user.avatarUrl.isNullOrBlank()) {
+                    _uiState.update { it.copy(userPhotoUrl = user.avatarUrl) }
+                    preferences.saveUserPhotoUrl(user.avatarUrl)
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Supabase: Gagal mengambil foto profil user")
+            }
         }
     }
     private fun observeCurrentWorker() {

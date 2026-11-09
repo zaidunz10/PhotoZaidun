@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.IntentSender
+import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.credentials.ClearCredentialStateRequest
@@ -20,6 +21,7 @@ import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.Scopes
 import com.google.android.gms.common.api.Scope
+import org.json.JSONObject
 import kotlin.coroutines.suspendCoroutine
 
 data class GoogleUser(
@@ -54,31 +56,48 @@ class GoogleAuthManager@Inject constructor(@ApplicationContext private val conte
             if (credential is CustomCredential &&
                 credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
             ) {
-
-
-                val googleCredential =
-                    GoogleIdTokenCredential.createFrom(
-                        credential.data
-                    )
+                val googleCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                val photoUrl = extractGooglePhotoUrl(googleCredential)
 
                 GoogleUser(
                     id = googleCredential.id,
                     name = googleCredential.displayName ?: "",
                     email = googleCredential.id,
-                    photoUrl = googleCredential.profilePictureUri?.toString()
+                    photoUrl = photoUrl
                 )
-
             } else {
-
                 null
-
             }
-
         } catch (e: Exception) {
             Timber.e(e, "Login gagal: ${e.message}")
             throw e
         }
+    }
 
+    private fun extractGooglePhotoUrl(googleCredential: GoogleIdTokenCredential): String? {
+        val directUri = googleCredential.profilePictureUri?.toString()
+        if (!directUri.isNullOrBlank()) return directUri
+
+        try {
+            val idToken = googleCredential.idToken
+            val parts = idToken.split(".")
+            if (parts.size >= 2) {
+                val payloadBytes = Base64.decode(
+                    parts[1],
+                    Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
+                )
+                val payloadJson = String(payloadBytes, Charsets.UTF_8)
+                val jsonObject = JSONObject(payloadJson)
+                if (jsonObject.has("picture")) {
+                    val picUrl = jsonObject.getString("picture")
+                    if (picUrl.isNotBlank()) return picUrl
+                }
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Gagal mengekstrak photoUrl dari JWT ID Token: ${e.message}")
+        }
+
+        return null
     }
 
     suspend fun signOut(activity: Activity) {

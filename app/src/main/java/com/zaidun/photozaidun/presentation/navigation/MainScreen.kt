@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -32,9 +33,12 @@ import com.zaidun.photozaidun.presentation.theme.motion.MotionTokens
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.zaidun.photozaidun.presentation.screen.profile.ProfileScreen
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import com.zaidun.photozaidun.presentation.screen.settings.SettingsViewModel
 
 @OptIn(ExperimentalSharedTransitionApi::class)
@@ -59,36 +63,57 @@ fun MainScreen(
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentDestination = navBackStackEntry?.destination
+            Surface(
+                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                color = Color(0xFF23143D),
+                shadowElevation = 8.dp
+            ) {
+                NavigationBar(
+                    containerColor = androidx.compose.ui.graphics.Color(0xFF23143D)
+                ) {
+                    val navBackStackEntry by navController.currentBackStackEntryAsState()
+                    val currentDestination = navBackStackEntry?.destination
 
-                items.forEach { screen ->
-                    NavigationBarItem(
-                        icon = {
-                            Icon(
-                                imageVector = when(screen) {
-                                    Screen.Home -> Icons.Default.Home
-                                    Screen.Watermark -> Icons.Default.Brush
-                                    Screen.Profile -> Icons.Default.Person
-                                    Screen.Contact -> Icons.Default.Person
-                                    else -> Icons.Default.Settings
-                                },
-                                contentDescription = null
-                            )
-                        },
-                        label = { Text(screen.route.replaceFirstChar { it.uppercase() }) },
-                        selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
-                        onClick = {
-                            navController.navigate(screen.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
+                    items.forEach { screen ->
+                        val isSelected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
+                        NavigationBarItem(
+                            icon = {
+                                Icon(
+                                    imageVector = when(screen) {
+                                        Screen.Home -> Icons.Default.Home
+                                        Screen.Watermark -> Icons.Default.Brush
+                                        Screen.Profile -> Icons.Default.Person
+                                        Screen.Contact -> Icons.Default.Person
+                                        else -> Icons.Default.Settings
+                                    },
+                                    contentDescription = null
+                                )
+                            },
+                            label = { 
+                                Text(
+                                    screen.route.replaceFirstChar { it.uppercase() },
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                ) 
+                            },
+                            selected = isSelected,
+                            colors = NavigationBarItemDefaults.colors(
+                                indicatorColor = androidx.compose.ui.graphics.Color(0xFF7B4FE0),
+                                selectedIconColor = Color.White,
+                                unselectedIconColor = androidx.compose.ui.graphics.Color(0xFF9E8DBE),
+                                selectedTextColor = Color.White,
+                                unselectedTextColor = androidx.compose.ui.graphics.Color(0xFF9E8DBE)
+                            ),
+                            onClick = {
+                                navController.navigate(screen.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
-                                launchSingleTop = true
-                                restoreState = true
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }
