@@ -435,7 +435,7 @@ fun SettingsScreen(
             item {
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "Copyright by zaidunz_photo",
+                    text = "Copyright by zaidun_photo",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.LightGray,
                     modifier = Modifier.fillMaxWidth(),

@@ -20,6 +20,8 @@ import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.Scopes
 import com.google.android.gms.common.api.Scope
+import kotlin.coroutines.suspendCoroutine
+
 data class GoogleUser(
     val id: String,
     val name: String,
@@ -174,5 +176,14 @@ class GoogleAuthManager@Inject constructor(@ApplicationContext private val conte
 
             }
             .addOnFailureListener(onError)
+    }
+
+    suspend fun getFreshAccessToken(activity: Activity): String? = suspendCoroutine { cont ->
+        refreshDriveAccessToken(
+            activity = activity,
+            onTokenReady = { token -> cont.resumeWith(Result.success(token)) },
+            onNeedConsent = { cont.resumeWith(Result.success(null)) },
+            onError = { cont.resumeWith(Result.success(null)) }
+        )
     }
 }

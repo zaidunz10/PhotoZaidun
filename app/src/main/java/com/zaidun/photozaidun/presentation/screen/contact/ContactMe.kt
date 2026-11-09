@@ -68,8 +68,8 @@ fun ContactScreen() {
             // Link IG Bisnis
             SocialMediaCard(
                 title = "Business Account",
-                username = "@zaidunz_photo",
-                onClick = { uriHandler.openUri("https://www.instagram.com/zaidunz_photo/") }
+                username = "@zaidun_photo",
+                onClick = { uriHandler.openUri("https://www.instagram.com/zaidun_photo/") }
             )
 
             Spacer(Modifier.height(12.dp))
@@ -84,7 +84,7 @@ fun ContactScreen() {
             Spacer(Modifier.weight(1f))
 
             Text(
-                "Copyright by zaidunz_photo",
+                "Copyright by zaidun_photo",
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.LightGray,
                 modifier = Modifier.fillMaxWidth(),

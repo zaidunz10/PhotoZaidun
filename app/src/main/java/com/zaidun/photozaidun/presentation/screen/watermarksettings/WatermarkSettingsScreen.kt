@@ -310,7 +310,7 @@ fun WatermarkSettingsScreen(
                 ControlSlider("Posisi Y", infoY, 0f, 1f, { isDragging = it }) { infoY = it }
 
                 Spacer(Modifier.height(32.dp))
-                Text("zaidunz_photo © 2026", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, fontSize = 10.sp, color = Color.LightGray)
+                Text("zaidun_photo © 2026", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, fontSize = 10.sp, color = Color.LightGray)
             }
         }
     }

@@ -482,7 +482,7 @@ fun HomeScreen(
 
             Spacer(Modifier.height(16.dp))
             Text(
-                "Copyright by zaidunz_photo",
+                "Copyright by zaidun_photo",
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.LightGray,
                 modifier = Modifier.fillMaxWidth(),

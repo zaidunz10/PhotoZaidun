@@ -442,42 +442,9 @@ class DriveUploadWorker @AssistedInject constructor(
             when (e.statusCode) {
 
                 401 -> {
-
-                    Timber.e(
-                        e,
-                        "Access Token expired"
-                    )
-
-                    val currentToken =
-                        preferences.driveAccessToken.first()
-
-                    Timber.tag("DriveToken")
-                        .d(
-                            "Worker Token = ${
-                                token.takeLast(5)
-                            }"
-                        )
-
-                    Timber.tag("DriveToken")
-                        .d(
-                            "DataStore Token = ${
-                                currentToken.takeLast(5)
-                            }"
-                        )
-
-                    if (currentToken != token) {
-
-                        Result.retry()
-
-                    } else {
-
-                        showFinalNotification(
-                            false,
-                            "Token Google Drive sudah kedaluwarsa"
-                        )
-
-                        Result.failure()
-                    }
+                    Timber.tag("DriveToken").w("Access Token 401 Expired. Retrying via WorkManager...")
+                    // Mengembalikan Result.retry() agar WorkManager mencoba ulang otomatis saat token disegarkan
+                    Result.retry()
                 }
 
                 403 -> {
