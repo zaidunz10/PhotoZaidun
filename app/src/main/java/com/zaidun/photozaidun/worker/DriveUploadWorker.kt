@@ -136,22 +136,25 @@ class DriveUploadWorker @AssistedInject constructor(
                 )
 
             var uploadParentId = rootId
+            var parentFolderWebViewLink: String? = null
 
-            // SUB FOLDER
+            // SUB FOLDER (misal: "08 november test")
             folderLevels
                 .map { it.name.trim() }
                 .filter { it.isNotBlank() }
                 .forEach { folderName ->
 
-                    uploadParentId =
-                        repository.getOrCreateFolder(
+                    val subFolderObj =
+                        repository.getOrCreateFolderWithLink(
                             drive,
                             folderName,
                             uploadParentId
                         )
+                    uploadParentId = subFolderObj.id
+                    parentFolderWebViewLink = subFolderObj.webViewLink
                 }
 
-            // PART
+            // RENTANG JAM / PART FOLDER
             val partFolder =
                 repository.getOrCreateFolderWithLink(
                     drive,
@@ -162,15 +165,18 @@ class DriveUploadWorker @AssistedInject constructor(
             val partFolderId = partFolder.id
             val partFolderWebViewLink = partFolder.webViewLink
 
-            Timber.tag("DriveUpload").d("Part Folder ID = $partFolderId | Link: $partFolderWebViewLink")
+            // Link yang disimpan ke Supabase: gunakan Link Subfolder Terakhir (Parent) jika ada, atau Link Jam
+            val finalDriveLink = parentFolderWebViewLink.takeIf { !it.isNullOrBlank() } ?: partFolderWebViewLink
+
+            Timber.tag("DriveUpload").d("Part Folder ID = $partFolderId | Final Link: $finalDriveLink")
 
             // UPDATE KE SUPABASE: Masukkan Link Google Drive & is_published ke tabel `sessions`
             val sessionId = inputData.getLong("session_id", -1L)
             val isPublished = inputData.getBoolean("is_published", true)
-            if (sessionId != -1L && !partFolderWebViewLink.isNullOrBlank()) {
+            if (sessionId != -1L && !finalDriveLink.isNullOrBlank()) {
                 try {
                     val updateDto = SessionUpdateDriveDto(
-                        driveFolderId = partFolderWebViewLink,
+                        driveFolderId = finalDriveLink,
                         isPublished = isPublished
                     )
                     SupabaseHelper.client.postgrest.from("sessions").update(updateDto) {

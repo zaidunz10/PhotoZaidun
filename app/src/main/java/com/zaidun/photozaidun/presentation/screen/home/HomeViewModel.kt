@@ -438,28 +438,47 @@ class HomeViewModel @Inject constructor(
     fun confirmLocationAndExport(location: String, accessToken: String) {
         dismissLocationDialog()
         
-        // Simpan sesi ke Supabase dan dapatkan ID Sesi (BIGINT)
+        // Simpan/Reuse sesi ke Supabase dan dapatkan ID Sesi (BIGINT)
         viewModelScope.launch {
             try {
-                val sessionDto = SessionInsertDto(
-                    photographerId = _uiState.value.userId,
-                    location = location,
-                    whatsappNumber = _uiState.value.photographerWa,
-                    instagramLink = _uiState.value.photographerIg,
-                    isPublished = _uiState.value.isPublishedForRider
-                )
+                val userId = _uiState.value.userId
                 
-                val response = SupabaseHelper.client.postgrest["sessions"]
-                    .insert(sessionDto) {
-                        select() // Meminta Supabase untuk mengembalikan data yang baru saja diinsert
-                    }.decodeSingle<SessionResponseDto>()
-                
-                Timber.d("Supabase: Sesi Fotografer berhasil disimpan dengan ID: ${response.id}")
+                // 1. Cek dulu apakah sesi untuk fotografer & lokasi ini sudah ada di Supabase
+                val existingSessions = SupabaseHelper.client.postgrest["sessions"]
+                    .select {
+                        filter {
+                            eq("photographer_id", userId)
+                            eq("location", location)
+                        }
+                    }.decodeList<SessionResponseDto>()
+
+                val existingId = existingSessions.lastOrNull()?.id
+
+                val targetSessionId = if (existingId != null && existingId > 0L) {
+                    Timber.d("Supabase: Menggunakan kembali Sesi yang sudah ada dengan ID: $existingId")
+                    existingId
+                } else {
+                    val sessionDto = SessionInsertDto(
+                        photographerId = userId,
+                        location = location,
+                        whatsappNumber = _uiState.value.photographerWa,
+                        instagramLink = _uiState.value.photographerIg,
+                        isPublished = _uiState.value.isPublishedForRider
+                    )
+                    
+                    val response = SupabaseHelper.client.postgrest["sessions"]
+                        .insert(sessionDto) {
+                            select()
+                        }.decodeSingle<SessionResponseDto>()
+                    
+                    Timber.d("Supabase: Sesi Fotografer baru berhasil disimpan dengan ID: ${response.id}")
+                    response.id
+                }
                 
                 // Teruskan ID Sesi ke worker agar nanti bisa di-update dengan link Google Drive
-                startBatchProcess(accessToken, response.id, _uiState.value.isPublishedForRider)
+                startBatchProcess(accessToken, targetSessionId, _uiState.value.isPublishedForRider)
             } catch (e: Exception) {
-                Timber.e(e, "Supabase: Gagal menyimpan sesi fotografer")
+                Timber.e(e, "Supabase: Gagal menyimpan/mengecek sesi fotografer")
                 // Fallback (jika misal gagal konek Supabase, tetap lanjutkan export tapi tanpa sessionId)
                 startBatchProcess(accessToken, -1L, _uiState.value.isPublishedForRider)
             }

@@ -28,6 +28,7 @@ import com.zaidun.photozaidun.worker.DriveUploadWorker.Companion.KEY_ACCESS_TOKE
 import com.zaidun.photozaidun.worker.DriveUploadWorker.Companion.KEY_FOLDER_URI
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import java.util.Calendar
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import timber.log.Timber
@@ -212,46 +213,54 @@ class BatchProcessWorker @AssistedInject constructor(
 
                     Timber.tag("EXPORT").d("Memproses Jam $hourFolder: ${hourFiles.size} foto")
                     
-                    hourFiles.forEachIndexed { fileIndex, file ->
+                    // Streaming Upload: Pemrosesan dibagi per-batch 500 foto
+                    val batches = hourFiles.chunked(500)
+                    batches.forEachIndexed { batchIndex, batchFiles ->
                         if (isStopped) return@coroutineScope
-                        
-                        val outputFileName: String
-                        val outputFile: DocumentFile?
 
-                        synchronized(outputFileLock) {
-                            val generatedName = generateNewName(file.name, suffix)
-                            if (generatedName in existingFiles) {
-                                completed.incrementAndGet()
-                                return@forEachIndexed
+                        batchFiles.forEach { file ->
+                            if (isStopped) return@coroutineScope
+                            
+                            val outputFileName: String
+                            val outputFile: DocumentFile?
+
+                            synchronized(outputFileLock) {
+                                val generatedName = generateNewName(file.name, suffix)
+                                if (generatedName in existingFiles) {
+                                    completed.incrementAndGet()
+                                    return@forEach
+                                }
+
+                                existingFiles.add(generatedName)
+                                outputFile = currentOutputFolder?.createFile(file.mime, generatedName)
+                                outputFileName = generatedName
                             }
 
-                            existingFiles.add(generatedName)
-                            outputFile = currentOutputFolder?.createFile(file.mime, generatedName)
-                            outputFileName = generatedName
-                        }
-
-                        outputFile?.uri?.let { outUri ->
-                            applicationContext.contentResolver.openOutputStream(outUri)?.use { outStream ->
-                                processor.process(
-                                    inputUri = file.uri,
-                                    watermarkConfig = watermarkConfig,
-                                    resizeConfig = ResizeConfig(percentage = resize),
-                                    fileName = outputFileName,
-                                    partName = hourFolder,
-                                    compressionConfig = CompressionConfig(quality = quality),
-                                    outputStream = outStream,
-                                    showTimestamp = wmShowTimestamp
-                                )
-                                
-                                val done = completed.incrementAndGet()
-                                if (done % 5 == 0 || done == imageFiles.size) {
-                                    updateExportProgress(done, imageFiles.size, file.name ?: "")
+                            outputFile?.uri?.let { outUri ->
+                                applicationContext.contentResolver.openOutputStream(outUri)?.use { outStream ->
+                                    processor.process(
+                                        inputUri = file.uri,
+                                        watermarkConfig = watermarkConfig,
+                                        resizeConfig = ResizeConfig(percentage = resize),
+                                        fileName = outputFileName,
+                                        partName = hourFolder,
+                                        compressionConfig = CompressionConfig(quality = quality),
+                                        outputStream = outStream,
+                                        showTimestamp = wmShowTimestamp
+                                    )
+                                    
+                                    val done = completed.incrementAndGet()
+                                    if (done % 5 == 0 || done == imageFiles.size) {
+                                        updateExportProgress(done, imageFiles.size, file.name ?: "")
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    currentOutputFolder?.let { enqueueUpload(it, hourFiles.size) }
+                        // Sesaat setelah 500 foto selesai diekspor di HP,
+                        // LANGSUNG picu upload Google Drive untuk 500 foto tersebut tanpa menunggu batch lainnya!
+                        currentOutputFolder?.let { enqueueUpload(it, batchFiles.size) }
+                    }
                 }
             }
             return Result.success(workDataOf(KEY_OUTPUT_FOLDER to outputBaseFolder.uri.toString()))
@@ -264,28 +273,54 @@ class BatchProcessWorker @AssistedInject constructor(
     }
 
     private fun getExifHourRange(uri: Uri): String {
-        return try {
+        var hour: Int? = null
+
+        // 1. Coba baca dari metadata EXIF (TAG_DATETIME_ORIGINAL, TAG_DATETIME_DIGITIZED, TAG_DATETIME)
+        try {
             applicationContext.contentResolver.openInputStream(uri)?.use { input ->
                 val exif = ExifInterface(input)
                 val dateStr = exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
+                    ?: exif.getAttribute(ExifInterface.TAG_DATETIME_DIGITIZED)
                     ?: exif.getAttribute(ExifInterface.TAG_DATETIME)
+
                 if (!dateStr.isNullOrBlank()) {
-                    val hourStr = dateStr.substringAfter(' ').substringBefore(':')
-                    val hour = hourStr.toIntOrNull()
-                    if (hour != null) {
-                        val startHour = String.format("%02d.00", hour)
-                        val endHour = String.format("%02d.00", (hour + 1) % 24)
-                        "$startHour - $endHour"
-                    } else {
-                        "Lainnya"
+                    val timePart = when {
+                        dateStr.contains(' ') -> dateStr.substringAfter(' ')
+                        dateStr.contains('T') -> dateStr.substringAfter('T')
+                        else -> dateStr
                     }
-                } else {
-                    "Lainnya"
+                    val hourString = timePart.substringBefore(':').trim()
+                    hour = hourString.toIntOrNull()
                 }
-            } ?: "Lainnya"
+            }
         } catch (e: Exception) {
-            "Lainnya"
+            Timber.w(e, "Gagal membaca EXIF date")
         }
+
+        // 2. Jika EXIF tanggal tidak ditemukan, fallback ke Last Modified file / System time
+        if (hour == null || hour !in 0..23) {
+            try {
+                val documentFile = DocumentFile.fromSingleUri(applicationContext, uri)
+                val lastModified = documentFile?.lastModified() ?: 0L
+                if (lastModified > 0L) {
+                    val cal = Calendar.getInstance()
+                    cal.timeInMillis = lastModified
+                    hour = cal.get(Calendar.HOUR_OF_DAY)
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "Gagal membaca lastModified file")
+            }
+        }
+
+        // 3. Jika masih null, gunakan jam sistem saat ini
+        if (hour == null || hour !in 0..23) {
+            val cal = Calendar.getInstance()
+            hour = cal.get(Calendar.HOUR_OF_DAY)
+        }
+
+        val startHour = String.format("%02d.00", hour)
+        val endHour = String.format("%02d.00", (hour + 1) % 24)
+        return "$startHour - $endHour"
     }
 
     private suspend fun updateExportProgress(done: Int, total: Int, fileName: String) {
