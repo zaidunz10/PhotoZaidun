@@ -33,5 +33,7 @@ data class HomeUiState(
     val userName: String = "",
     val photographerWa: String = "",
     val photographerIg: String = "",
-    val showLocationDialog: Boolean = false
+    val showLocationDialog: Boolean = false,
+    val isPublishedForRider: Boolean = true,
+    val locationSuggestions: List<String> = listOf("")
 )

@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.documentfile.provider.DocumentFile
+import androidx.exifinterface.media.ExifInterface
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
@@ -27,6 +28,7 @@ import com.zaidun.photozaidun.worker.DriveUploadWorker.Companion.KEY_ACCESS_TOKE
 import com.zaidun.photozaidun.worker.DriveUploadWorker.Companion.KEY_FOLDER_URI
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import timber.log.Timber
 import java.util.concurrent.atomic.AtomicInteger
@@ -65,6 +67,8 @@ class BatchProcessWorker @AssistedInject constructor(
                 if (freshToken.length > 5) freshToken.takeLast(5) else "EMPTY"
             Timber.tag("DriveDebug")
                 .d("Enqueue Upload ${folder.name} token=$tokenPreview")
+            val sessionId = inputData.getLong("session_id", -1L) // Ambil Session ID dari Input Data
+            val isPublished = inputData.getBoolean("is_published", true)
             val request =
                 OneTimeWorkRequestBuilder<DriveUploadWorker>()
                     .addTag("UPLOAD")
@@ -72,7 +76,9 @@ class BatchProcessWorker @AssistedInject constructor(
                         workDataOf(
                             KEY_FOLDER_URI to folder.uri.toString(),
                             KEY_ACCESS_TOKEN to freshToken,
-                            DriveUploadWorker.KEY_EXPECTED_COUNT to expectedCount
+                            DriveUploadWorker.KEY_EXPECTED_COUNT to expectedCount,
+                            "session_id" to sessionId,
+                            "is_published" to isPublished
                         )
                     )
                     .build()
@@ -187,27 +193,26 @@ class BatchProcessWorker @AssistedInject constructor(
                 imageFiles.size
             )
 
-            kotlinx.coroutines.coroutineScope {
-                val parts = imageFiles.chunked(maxPhotos)
-                parts.forEachIndexed { partIndex, partFiles ->
+            val groupedByHour = imageFiles.groupBy { file ->
+                getExifHourRange(file.uri)
+            }
+
+            coroutineScope {
+                groupedByHour.forEach { (hourFolder, hourFiles) ->
                     if (isStopped) return@coroutineScope
-                    val partNumber = startFrom + partIndex
-                    val currentFolderName = "${partPrefix}$partNumber"
-                    val currentOutputFolder = outputBaseFolder.findFile(currentFolderName)
-                        ?: outputBaseFolder.createDirectory(currentFolderName)
+                    val currentOutputFolder = outputBaseFolder.findFile(hourFolder)
+                        ?: outputBaseFolder.createDirectory(hourFolder)
                     val existingFiles = HashSet<String>()
 
                     currentOutputFolder
                         ?.listFiles()
                         ?.forEach {
-
                             it.name?.let(existingFiles::add)
                         }
 
-                    Timber.tag("EXPORT").d("Memproses Part $partNumber: ${partFiles.size} foto")
+                    Timber.tag("EXPORT").d("Memproses Jam $hourFolder: ${hourFiles.size} foto")
                     
-                    // Berurutan: Menggunakan forEach, bukan async paralel
-                    partFiles.forEachIndexed { fileIndexInPart, file ->
+                    hourFiles.forEachIndexed { fileIndex, file ->
                         if (isStopped) return@coroutineScope
                         
                         val outputFileName: String
@@ -216,7 +221,6 @@ class BatchProcessWorker @AssistedInject constructor(
                         synchronized(outputFileLock) {
                             val generatedName = generateNewName(file.name, suffix)
                             if (generatedName in existingFiles) {
-                                // Lewati jika sudah ada, tapi tetap hitung progress
                                 completed.incrementAndGet()
                                 return@forEachIndexed
                             }
@@ -233,7 +237,7 @@ class BatchProcessWorker @AssistedInject constructor(
                                     watermarkConfig = watermarkConfig,
                                     resizeConfig = ResizeConfig(percentage = resize),
                                     fileName = outputFileName,
-                                    partName = currentFolderName,
+                                    partName = hourFolder,
                                     compressionConfig = CompressionConfig(quality = quality),
                                     outputStream = outStream,
                                     showTimestamp = wmShowTimestamp
@@ -247,26 +251,7 @@ class BatchProcessWorker @AssistedInject constructor(
                         }
                     }
 
-                    // DOUBLE CHECK: Bandingkan hasil export dengan daftar file asli
-                    val exportedFiles = currentOutputFolder?.listFiles()?.mapNotNull { it.name }?.toSet() ?: emptySet()
-                    val missingFiles = mutableListOf<String>()
-
-                    partFiles.forEach { file ->
-                        val expectedName = generateNewName(file.name, suffix)
-                        if (expectedName !in exportedFiles) {
-                            missingFiles.add(expectedName)
-                        }
-                    }
-
-                    if (missingFiles.isNotEmpty()) {
-                        Timber.tag("EXPORT_CHECK").e("DANGER: File asli berikut tidak ditemukan hasil exportnya: $missingFiles")
-                        // Jika ada yang kurang, kita beri waktu tambahan (SAF indexing) lalu cek sekali lagi
-                        kotlinx.coroutines.delay(2000)
-                    } else {
-                        Timber.tag("EXPORT_CHECK").d("Part $partNumber LULUS VERIFIKASI: Semua file asli sudah ter-export.")
-                    }
-
-                    currentOutputFolder?.let { enqueueUpload(it, partFiles.size) }
+                    currentOutputFolder?.let { enqueueUpload(it, hourFiles.size) }
                 }
             }
             return Result.success(workDataOf(KEY_OUTPUT_FOLDER to outputBaseFolder.uri.toString()))
@@ -275,6 +260,31 @@ class BatchProcessWorker @AssistedInject constructor(
             return Result.failure()
         } finally {
             processor.clearCache()
+        }
+    }
+
+    private fun getExifHourRange(uri: Uri): String {
+        return try {
+            applicationContext.contentResolver.openInputStream(uri)?.use { input ->
+                val exif = ExifInterface(input)
+                val dateStr = exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
+                    ?: exif.getAttribute(ExifInterface.TAG_DATETIME)
+                if (!dateStr.isNullOrBlank()) {
+                    val hourStr = dateStr.substringAfter(' ').substringBefore(':')
+                    val hour = hourStr.toIntOrNull()
+                    if (hour != null) {
+                        val startHour = String.format("%02d.00", hour)
+                        val endHour = String.format("%02d.00", (hour + 1) % 24)
+                        "$startHour - $endHour"
+                    } else {
+                        "Lainnya"
+                    }
+                } else {
+                    "Lainnya"
+                }
+            } ?: "Lainnya"
+        } catch (e: Exception) {
+            "Lainnya"
         }
     }
 

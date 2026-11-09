@@ -123,7 +123,7 @@ fun HomeScreen(
             title = { Text("Input Lokasi Hunting") },
             text = {
                 var expanded by remember { mutableStateOf(false) }
-                val locationSuggestions = listOf("Kawah Putih Ciwidey", "KFC Sukawangi Lembang", "Ranca Upas", "Glamping Lakesides")
+                val locationSuggestions = uiState.locationSuggestions
                 Column {
                     Text("Tentukan lokasi hunting Anda sebelum melakukan ekspor.")
                     Spacer(Modifier.height(16.dp))

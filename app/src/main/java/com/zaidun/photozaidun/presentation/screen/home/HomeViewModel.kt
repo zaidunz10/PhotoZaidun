@@ -24,11 +24,14 @@ import com.zaidun.photozaidun.data.auth.GoogleAuthManager
 import com.zaidun.photozaidun.data.drive.DriveServiceFactory
 import com.zaidun.photozaidun.data.drive.GoogleDriveRepository
 import com.zaidun.photozaidun.data.remote.SessionInsertDto
+import com.zaidun.photozaidun.data.remote.SessionLocationDto
+import com.zaidun.photozaidun.data.remote.SessionResponseDto
 import com.zaidun.photozaidun.data.remote.SupabaseHelper
 import com.zaidun.photozaidun.domain.model.PhotoItem
 import io.github.jan.supabase.postgrest.postgrest
 import com.zaidun.photozaidun.worker.DriveUploadWorker.Companion.KEY_ACCESS_TOKEN
 import com.zaidun.photozaidun.worker.KEY_OUTPUT_FOLDER
+import io.github.jan.supabase.postgrest.query.Columns
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.update
@@ -318,7 +321,7 @@ class HomeViewModel @Inject constructor(
     fun prepareExport(
         accessToken: String
     ) {
-        startBatchProcess(accessToken)
+        startBatchProcess(accessToken, -1L, true) // Default tanpa Session ID jika langsung dari UI
     }
 
     fun refreshTokenForUpload(
@@ -387,6 +390,29 @@ class HomeViewModel @Inject constructor(
         UserLogger.logExport(email, name, total)
     }
 
+    fun loadLocationSuggestionsFromSupabase() {
+        viewModelScope.launch {
+            try {
+                val dbLocations = SupabaseHelper.client.postgrest["sessions"]
+                    .select(Columns.list("location"))
+                    .decodeList<SessionLocationDto>()
+                    .map { it.location.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+
+                if (dbLocations.isNotEmpty()) {
+                    _uiState.update { state ->
+                        val combined = (state.locationSuggestions + dbLocations).distinct()
+                        state.copy(locationSuggestions = combined)
+                    }
+                    Timber.d("Supabase: Berhasil memuat ${dbLocations.size} lokasi unik dari database.")
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Supabase: Gagal mengambil daftar lokasi")
+            }
+        }
+    }
+
     fun onStartExportClicked(): Boolean {
         // Cek kelengkapan WA & IG dari DataStore (sebelumnya diisi di ProfileScreen)
         val wa = _uiState.value.photographerWa
@@ -395,6 +421,7 @@ class HomeViewModel @Inject constructor(
             return false // Minta user lengkapi profil dulu
         }
         
+        loadLocationSuggestionsFromSupabase()
         // Profil lengkap, tampilkan dialog lokasi
         _uiState.update { it.copy(showLocationDialog = true) }
         return true
@@ -403,32 +430,43 @@ class HomeViewModel @Inject constructor(
     fun dismissLocationDialog() {
         _uiState.update { it.copy(showLocationDialog = false) }
     }
+
+    fun togglePublishForRider(enabled: Boolean) {
+        _uiState.update { it.copy(isPublishedForRider = enabled) }
+    }
     
     fun confirmLocationAndExport(location: String, accessToken: String) {
         dismissLocationDialog()
         
-        // Simpan sesi ke Supabase
+        // Simpan sesi ke Supabase dan dapatkan ID Sesi (BIGINT)
         viewModelScope.launch {
             try {
                 val sessionDto = SessionInsertDto(
                     photographerId = _uiState.value.userId,
                     location = location,
                     whatsappNumber = _uiState.value.photographerWa,
-                    instagramLink = _uiState.value.photographerIg
+                    instagramLink = _uiState.value.photographerIg,
+                    isPublished = _uiState.value.isPublishedForRider
                 )
                 
-                SupabaseHelper.client.postgrest["sessions"].insert(sessionDto)
+                val response = SupabaseHelper.client.postgrest["sessions"]
+                    .insert(sessionDto) {
+                        select() // Meminta Supabase untuk mengembalikan data yang baru saja diinsert
+                    }.decodeSingle<SessionResponseDto>()
                 
-                Timber.d("Supabase: Sesi Fotografer berhasil disimpan.")
+                Timber.d("Supabase: Sesi Fotografer berhasil disimpan dengan ID: ${response.id}")
+                
+                // Teruskan ID Sesi ke worker agar nanti bisa di-update dengan link Google Drive
+                startBatchProcess(accessToken, response.id, _uiState.value.isPublishedForRider)
             } catch (e: Exception) {
                 Timber.e(e, "Supabase: Gagal menyimpan sesi fotografer")
+                // Fallback (jika misal gagal konek Supabase, tetap lanjutkan export tapi tanpa sessionId)
+                startBatchProcess(accessToken, -1L, _uiState.value.isPublishedForRider)
             }
         }
-        
-        startBatchProcess(accessToken)
     }
 
-    fun startBatchProcess(accessToken: String) {
+    private fun startBatchProcess(accessToken: String, sessionId: Long, isPublished: Boolean) {
         // PERBAIKAN INDENTASI & GUARD
         if (_uiState.value.isProcessing) {
             Timber.tag("EXPORT").d("Proses sedang berjalan, mengabaikan klik ganda.")
@@ -440,7 +478,14 @@ class HomeViewModel @Inject constructor(
 
         val request = OneTimeWorkRequestBuilder<BatchProcessWorker>()
             .addTag("EXPORT")
-            .setInputData(workDataOf("input_folder" to _uiState.value.selectedFolder, KEY_ACCESS_TOKEN to accessToken))
+            .setInputData(
+                workDataOf(
+                    "input_folder" to _uiState.value.selectedFolder, 
+                    KEY_ACCESS_TOKEN to accessToken,
+                    "session_id" to sessionId,
+                    "is_published" to isPublished
+                )
+            )
             .build()
 
         currentWorkId = request.id

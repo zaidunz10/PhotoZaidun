@@ -17,8 +17,12 @@ import com.zaidun.photozaidun.data.drive.DriveServiceFactory
 import com.zaidun.photozaidun.data.drive.GoogleDriveRepository
 import com.zaidun.photozaidun.data.drive.copyToCache
 import com.zaidun.photozaidun.data.local.datastore.UserPreferencesDataStore
+import com.zaidun.photozaidun.data.remote.SessionUpdateDriveDto
+import com.zaidun.photozaidun.data.remote.SupabaseHelper
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.filter.FilterOperator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -148,15 +152,35 @@ class DriveUploadWorker @AssistedInject constructor(
                 }
 
             // PART
-            val partFolderId =
-                repository.getOrCreateFolder(
+            val partFolder =
+                repository.getOrCreateFolderWithLink(
                     drive,
                     folder.name ?: "part1",
                     uploadParentId
                 )
+            
+            val partFolderId = partFolder.id
+            val partFolderWebViewLink = partFolder.webViewLink
 
-            Timber.tag("DriveUpload")
-                .d("Part Folder ID = $partFolderId")
+            Timber.tag("DriveUpload").d("Part Folder ID = $partFolderId | Link: $partFolderWebViewLink")
+
+            // UPDATE KE SUPABASE: Masukkan Link Google Drive & is_published ke tabel `sessions`
+            val sessionId = inputData.getLong("session_id", -1L)
+            val isPublished = inputData.getBoolean("is_published", true)
+            if (sessionId != -1L && !partFolderWebViewLink.isNullOrBlank()) {
+                try {
+                    val updateDto = SessionUpdateDriveDto(
+                        driveFolderId = partFolderWebViewLink,
+                        isPublished = isPublished
+                    )
+                    SupabaseHelper.client.postgrest.from("sessions").update(updateDto) {
+                        filter { eq("id", sessionId) }
+                    }
+                    Timber.tag("DriveUpload").d("Supabase: WebViewLink & isPublished berhasil diupdate ke sessions ($sessionId)")
+                } catch (e: Exception) {
+                    Timber.e(e, "Supabase: Gagal update WebViewLink ke sessions")
+                }
+            }
 
             // -----------------------------------------------------
             // 4. AMBIL FILE YANG SUDAH ADA DI DRIVE

@@ -224,46 +224,6 @@ fun SettingsScreen(
                 }
             }
 
-            // Upload Otomatis
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Upload Otomatis ke Google Drive",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                color = TitleDark
-                            )
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                "Setelah export selesai, folder akan langsung diupload ke Google Drive.",
-                                fontSize = 11.sp,
-                                color = LabelGray
-                            )
-                        }
-                        Switch(
-                            checked = uiState.autoUpload,
-                            onCheckedChange = { viewModel.saveAutoUpload(it) },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = AccentPurple
-                            )
-                        )
-                    }
-                }
-            }
-
             // 2. Struktur Folder & Penamaan — accordion style
             item {
                 SectionLabel("Struktur Folder & Penamaan")
@@ -361,41 +321,6 @@ fun SettingsScreen(
 
                 }
 
-            }
-
-            item {
-                Spacer(Modifier.height(10.dp))
-                ExpandableFolderField(
-                    icon = Icons.Default.Numbers,
-                    label = "Prefix Nama Part (Level 3)",
-                    value = uiState.partFolder,
-                    onValueChange = { viewModel.savePartFolder(it) },
-                    fieldLabel = "Prefix Nama Part",
-                    placeholder = "Contoh: Part",
-                    supportingText = "Akan menjadi ${uiState.partFolder}1, dst."
-                )
-            }
-
-            item {
-                Spacer(Modifier.height(10.dp))
-                OutlinedTextField(
-                    // Tambahkan .toString() karena TextField hanya mau Teks
-                    value = uiState.startPartNumber.toString(),
-                    onValueChange = {
-                        // Ambil angka saja, lalu ubah ke Int untuk disimpan ke ViewModel
-                        val newValue = it.filter { char -> char.isDigit() }.toIntOrNull() ?: 1
-                        viewModel.saveStartPart(newValue)
-                    },
-                    label = { Text("Mulai dari Part Ke-") },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    leadingIcon = { Icon(Icons.Default.PlayArrow, null, tint = AccentPurple) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = AccentPurple,
-                        focusedLabelColor = AccentPurple
-                    )
-                )
             }
 
             item {

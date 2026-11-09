@@ -5,6 +5,7 @@ import android.R.attr.query
 import com.google.api.client.http.FileContent
 import com.google.api.services.drive.Drive
 import com.google.api.services.drive.model.File
+import com.google.api.services.drive.model.Permission
 import timber.log.Timber
 import java.net.URLConnection
 import java.io.File as JavaFile
@@ -149,7 +150,7 @@ class GoogleDriveRepository @Inject constructor() {
         drive: Drive,
         folderName: String,
         parentId: String? = null
-    ): String {
+    ): File { // <-- Mengembalikan object File secara penuh, bukan hanya string ID
 
         val metadata = File().apply {
             name = folderName
@@ -160,11 +161,23 @@ class GoogleDriveRepository @Inject constructor() {
             }
         }
 
-        return drive.files()
+        // Meminta Google Drive untuk membuat folder yang BISA DIBACA SEMUA ORANG
+        val createdFile = drive.files()
             .create(metadata)
-            .setFields("id")
+            .setFields("id, webViewLink")
             .execute()
-            .id
+            
+        // Atur hak akses agar linknya bisa dibaca (Reader / Anyone with link)
+        try {
+            val permission = Permission()
+                .setType("anyone")
+                .setRole("reader")
+            drive.permissions().create(createdFile.id, permission).execute()
+        } catch (e: Exception) {
+            Timber.e(e, "Gagal mengatur permission folder Google Drive")
+        }
+        
+        return createdFile
     }
 
     fun getOrCreateFolder(
@@ -188,12 +201,26 @@ class GoogleDriveRepository @Inject constructor() {
         } else {
 
             Timber.d("Folder belum ada, membuat folder baru")
+            
+            createFolder(drive, folderName, parentId).id
 
-            createFolder(
-                drive,
-                folderName,
-                parentId
-            )
+        }
+    }
+    
+    // Fungsi baru khusus untuk Part Folder yang akan dipakai oleh Rider
+    fun getOrCreateFolderWithLink(
+        drive: Drive,
+        folderName: String,
+        parentId: String? = null
+    ): File {
+        val folderId = findFolder(drive, folderName, parentId)
+
+        if (folderId != null) {
+            Timber.d("Folder ditemukan")
+            return drive.files().get(folderId).setFields("id, webViewLink").execute()
+        } else {
+            Timber.d("Folder belum ada, membuat folder baru")
+            return createFolder(drive, folderName, parentId)
         }
     }
 
