@@ -62,8 +62,8 @@ fun CariFotoProfileScreen(
     }
 
     val user = authUiState.googleUser
-    val userName = user?.name?.ifBlank { "Rider CariFoto" } ?: "Rider CariFoto"
-    val userEmail = user?.email?.ifBlank { "rider@carifoto.id" } ?: "rider@carifoto.id"
+    val userName = user?.name?.ifBlank { "Guest" } ?: "Guest"
+    val userEmail = user?.email?.ifBlank { "Guest@carifoto.id" } ?: "Guest@carifoto.id"
     val photoUrl = user?.photoUrl
 
     val initials = userName.trim().split(" ").take(2).mapNotNull { it.firstOrNull()?.uppercase() }.joinToString("")
