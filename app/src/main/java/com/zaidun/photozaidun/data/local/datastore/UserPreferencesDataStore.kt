@@ -60,6 +60,12 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
         private val INFO_OFFSET_Y = floatPreferencesKey("info_offset_y")
         private val INFO_FONT_SIZE = floatPreferencesKey("info_font_size")
 
+        private val BANK_NAME_KEY = stringPreferencesKey("bank_name")
+        private val ACCOUNT_NUMBER_KEY = stringPreferencesKey("account_number")
+        private val ACCOUNT_HOLDER_NAME_KEY = stringPreferencesKey("account_holder_name")
+        private val DEFAULT_PHOTO_PRICE_KEY = intPreferencesKey("default_photo_price")
+        private val MIN_QTY_DISCOUNT_KEY = intPreferencesKey("min_qty_discount")
+        private val PRICE_DISCOUNT_KEY = intPreferencesKey("price_discount")
     }
 
     val userId: Flow<String> = context.dataStore.data.map { it[USER_ID_KEY] ?: "" }
@@ -179,6 +185,13 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
     suspend fun savePhotographerWa(value: String) { context.dataStore.edit { it[PHOTOGRAPHER_WA] = value } }
     suspend fun savePhotographerIg(value: String) { context.dataStore.edit { it[PHOTOGRAPHER_IG] = value } }
 
+    suspend fun savePhotographerProfile(wa: String, ig: String) {
+        context.dataStore.edit {
+            it[PHOTOGRAPHER_WA] = wa
+            it[PHOTOGRAPHER_IG] = ig
+        }
+    }
+
     suspend fun saveFileSuffix(value: String) {
         context.dataStore.edit { it[FILE_SUFFIX] = value }
     }
@@ -287,4 +300,33 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
     val darkMode: Flow<Boolean> = context.dataStore.data.map { it[DARK_MODE] ?: false }
     val autoUpload: Flow<Boolean> = context.dataStore.data.map { it[AUTO_UPLOAD] ?: false }
     val lastFolder: Flow<String> = context.dataStore.data.map { it[LAST_FOLDER] ?: "" }
+
+    val bankName: Flow<String> = context.dataStore.data.map { it[BANK_NAME_KEY] ?: "BCA" }
+    val accountNumber: Flow<String> = context.dataStore.data.map { it[ACCOUNT_NUMBER_KEY] ?: "" }
+    val accountHolderName: Flow<String> = context.dataStore.data.map { it[ACCOUNT_HOLDER_NAME_KEY] ?: "" }
+    val defaultPhotoPrice: Flow<Int> = context.dataStore.data.map { it[DEFAULT_PHOTO_PRICE_KEY] ?: 10000 }
+    val minQtyDiscount: Flow<Int> = context.dataStore.data.map { it[MIN_QTY_DISCOUNT_KEY] ?: 3 }
+    val priceDiscount: Flow<Int?> = context.dataStore.data.map { it[PRICE_DISCOUNT_KEY] }
+
+    suspend fun saveBankAndPricingInfo(
+        bank: String,
+        accountNum: String,
+        holderName: String,
+        priceSingle: Int,
+        minQty: Int,
+        discountPrice: Int?
+    ) {
+        context.dataStore.edit {
+            it[BANK_NAME_KEY] = bank
+            it[ACCOUNT_NUMBER_KEY] = accountNum
+            it[ACCOUNT_HOLDER_NAME_KEY] = holderName
+            it[DEFAULT_PHOTO_PRICE_KEY] = priceSingle
+            it[MIN_QTY_DISCOUNT_KEY] = minQty
+            if (discountPrice != null) {
+                it[PRICE_DISCOUNT_KEY] = discountPrice
+            } else {
+                it.remove(PRICE_DISCOUNT_KEY)
+            }
+        }
+    }
 }

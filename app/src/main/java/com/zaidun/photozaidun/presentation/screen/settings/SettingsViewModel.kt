@@ -107,7 +107,13 @@ class SettingsViewModel @Inject constructor(
                 preferences.maxPhotoPerFolder,
                 preferences.autoUpload,
                 preferences.driveAccessToken,
-                preferences.startPartNumber
+                preferences.startPartNumber,
+                preferences.bankName,
+                preferences.accountNumber,
+                preferences.accountHolderName,
+                preferences.defaultPhotoPrice,
+                preferences.minQtyDiscount,
+                preferences.priceDiscount
             ) { args: Array<Any?> ->
                 val id = args[0] as String
                 val name = args[1] as String
@@ -124,21 +130,30 @@ class SettingsViewModel @Inject constructor(
                 val auto = args[12] as Boolean
                 val token = args[13] as String
                 val startPart = args[14] as Int
+                val bank = args[15] as String
+                val accNum = args[16] as String
+                val holder = args[17] as String
+                val price = args[18] as Int
+                val minQty = args[19] as Int
+                val discountPrice = args[20] as Int?
 
                 val user = if (id.isNotEmpty()) GoogleUser(id, name, email, photoUrl.ifBlank { null }) else null
 
-                // Jika pengguna sudah login sebelumnya (sudah ada data di HP),
-                // catat/update sesi aktifnya ke Firestore secara otomatis
                 if (user != null && user.email.isNotBlank()) {
                     UserLogger.logLogin(user.email, user.name)
                 }
 
-                //testing 30/09/2026 21:36
                 _uiState.update {
                     it.copy(
                         googleUser = user,
                         photographerWa = wa,
                         photographerIg = ig,
+                        bankName = bank,
+                        accountNumber = accNum,
+                        accountHolderName = holder,
+                        defaultPhotoPrice = price,
+                        minQtyDiscount = minQty,
+                        priceDiscount = discountPrice,
                         driveConnected = token.isNotBlank(),
                         rootFolder = root,
                         folderLevels = folderLevels.filterIsInstance<FolderLevel>(),
@@ -228,5 +243,21 @@ class SettingsViewModel @Inject constructor(
     fun saveMaxPhoto(v: String) {
         _uiState.update { it.copy(maxPhotoPerFolder = v) }
         viewModelScope.launch { v.toIntOrNull()?.let { preferences.saveMaxPhotoPerFolder(it) } }
+    }
+
+    fun savePhotographerProfileAndBank(
+        wa: String,
+        ig: String,
+        bank: String,
+        accountNum: String,
+        holderName: String,
+        priceSingle: Int,
+        minQtyDiscount: Int,
+        priceDiscount: Int?
+    ) {
+        viewModelScope.launch {
+            preferences.savePhotographerProfile(wa, ig)
+            preferences.saveBankAndPricingInfo(bank, accountNum, holderName, priceSingle, minQtyDiscount, priceDiscount)
+        }
     }
 }

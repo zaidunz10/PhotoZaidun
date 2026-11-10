@@ -22,7 +22,9 @@ data class SessionInsertDto(
     val location: String,
     @SerialName("whatsapp_number") val whatsappNumber: String,
     @SerialName("instagram_link") val instagramLink: String,
-    @SerialName("price_single") val priceSingle: Int = 0,
+    @SerialName("price_single") val priceSingle: Int = 10000,
+    @SerialName("min_qty_discount") val minQtyDiscount: Int? = null,
+    @SerialName("price_discount") val priceDiscount: Int? = null,
     @SerialName("is_published") val isPublished: Boolean = true
 )
 

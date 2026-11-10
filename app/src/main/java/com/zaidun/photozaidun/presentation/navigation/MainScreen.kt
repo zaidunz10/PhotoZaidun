@@ -2,7 +2,6 @@ package com.zaidun.photozaidun.presentation.navigation
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import com.zaidun.photozaidun.presentation.screen.contact.ContactScreen
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
@@ -56,9 +55,7 @@ fun MainScreen(
     val items = listOf(
         Screen.Home,
         Screen.Watermark,
-        Screen.Profile,
-        Screen.Settings,
-        Screen.Contact
+        Screen.Profile
     )
 
     Scaffold(
@@ -83,7 +80,6 @@ fun MainScreen(
                                         Screen.Home -> Icons.Default.Home
                                         Screen.Watermark -> Icons.Default.Brush
                                         Screen.Profile -> Icons.Default.Person
-                                        Screen.Contact -> Icons.Default.Person
                                         else -> Icons.Default.Settings
                                     },
                                     contentDescription = null
@@ -161,17 +157,14 @@ fun MainScreen(
                 ProfileScreen(
                     uiState = settingsUiState,
                     onBack = { navController.popBackStack() },
-                    onSaveSuccess = { wa, ig ->
-                        settingsViewModel.savePhotographerProfile(wa, ig)
+                    onSaveSuccess = { wa, ig, bank, accNum, holder, priceSingle, minQty, discountPrice ->
+                        settingsViewModel.savePhotographerProfileAndBank(wa, ig, bank, accNum, holder, priceSingle, minQty, discountPrice)
                     }
                 )
             }
             composable(Screen.Settings.route) {
                 SettingsScreen(onBack = { navController.popBackStack() })
             }
-                    composable(Screen.Contact.route) {
-                        ContactScreen()
-                    }
 
         }
     }

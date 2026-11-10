@@ -337,39 +337,10 @@ fun SettingsScreen(
                         "Contoh: IMG_01_${uiState.fileSuffix}.jpg"
                 )
             }
-
-            // 3. Limit & Kualitas
             item {
                 Spacer(Modifier.height(6.dp))
-                SectionLabel("Limit & Kualitas")
+                SectionLabel("Resolusi Export: ${uiState.resizePercent}%")
                 Spacer(Modifier.height(12.dp))
-
-                OutlinedTextField(
-                    value = uiState.maxPhotoPerFolder,
-                    onValueChange = {
-                        val value = it.filter(Char::isDigit)
-                        if (value.length <= 5) viewModel.saveMaxPhoto(value)
-                    },
-                    label = { Text("Jumlah Foto per Folder") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    leadingIcon = { Icon(Icons.Default.Numbers, null, tint = AccentPurple) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = AccentPurple,
-                        focusedLabelColor = AccentPurple
-                    )
-                )
-
-                Spacer(Modifier.height(24.dp))
-
-                Text(
-                    "Resolusi Export: ${uiState.resizePercent}%",
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp,
-                    color = TitleDark
-                )
-                Spacer(Modifier.height(10.dp))
 
                 WaveSlider(
                     value = uiState.resizePercent.toFloatOrNull() ?: 100f,
@@ -377,6 +348,8 @@ fun SettingsScreen(
                     valueRange = 10f..100f
                 )
             }
+
+
 
             // Preview Section
             item {

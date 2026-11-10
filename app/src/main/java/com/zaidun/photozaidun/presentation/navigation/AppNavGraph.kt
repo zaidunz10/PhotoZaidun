@@ -102,8 +102,8 @@ fun AppNavGraph() {
                 ProfileScreen(
                     uiState = settingsUiState,
                     onBack = { navController.popBackStack() },
-                    onSaveSuccess = { wa, ig ->
-                        settingsViewModel.savePhotographerProfile(wa, ig)
+                    onSaveSuccess = { wa, ig, bank, accNum, holder, priceSingle, minQty, discountPrice ->
+                        settingsViewModel.savePhotographerProfileAndBank(wa, ig, bank, accNum, holder, priceSingle, minQty, discountPrice)
                     }
                 )
             }

@@ -488,11 +488,18 @@ class HomeViewModel @Inject constructor(
                     Timber.d("Supabase: Menggunakan kembali Sesi yang sudah ada dengan ID: $existingId")
                     existingId
                 } else {
+                    val priceSingleVal = preferences.defaultPhotoPrice.first().takeIf { it > 0 } ?: 10000
+                    val minQtyVal = preferences.minQtyDiscount.first()
+                    val discountPriceVal = preferences.priceDiscount.first()
+
                     val sessionDto = SessionInsertDto(
                         photographerId = userId,
                         location = location,
                         whatsappNumber = _uiState.value.photographerWa,
                         instagramLink = _uiState.value.photographerIg,
+                        priceSingle = priceSingleVal,
+                        minQtyDiscount = minQtyVal,
+                        priceDiscount = discountPriceVal,
                         isPublished = _uiState.value.isPublishedForRider
                     )
                     

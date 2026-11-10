@@ -9,6 +9,12 @@ data class SettingsUiState(
     val driveConnected: Boolean = false,
     val photographerWa: String = "",
     val photographerIg: String = "",
+    val bankName: String = "BCA",
+    val accountNumber: String = "",
+    val accountHolderName: String = "",
+    val defaultPhotoPrice: Int = 10000,
+    val minQtyDiscount: Int = 3,
+    val priceDiscount: Int? = null,
 
     val rootFolder: String = "Photo Zaidun",
     val partFolder: String = "part",

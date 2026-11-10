@@ -122,7 +122,7 @@ fun HomeScreen(
                     .padding(bottom = 24.dp)
             ) {
                 Text(
-                    "Tentukan lokasi hunting",
+                    "Tentukan lokasi",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextDark
@@ -138,7 +138,7 @@ fun HomeScreen(
                 OutlinedTextField(
                     value = locationText,
                     onValueChange = { locationText = it },
-                    placeholder = { Text("Cari lokasi, misalnya Ciwidey...", color = TextGray) },
+                    placeholder = { Text("Lokasi Atau Event", color = TextGray) },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextGray) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
