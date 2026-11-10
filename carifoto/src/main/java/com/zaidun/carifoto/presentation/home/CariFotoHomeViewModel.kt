@@ -2,6 +2,7 @@ package com.zaidun.carifoto.presentation.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.zaidun.carifoto.data.model.DriveFolderItem
 import com.zaidun.carifoto.data.remote.CariFotoOrderDto
 import com.zaidun.carifoto.data.remote.CariFotoPhotoDto
 import com.zaidun.carifoto.data.remote.CariFotoSessionDto
@@ -105,63 +106,149 @@ class CariFotoHomeViewModel : ViewModel() {
     }
 
 
+
     fun loadPhotosFromDrive(sessionId: Long) {
         viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isLoading = true,
+                    driveFolders = emptyList(),
+                    driveFolderStack = emptyList(),
+                    driveRootFolderId = null,
+                    drivePhotos = emptyList(),
+                    filteredDrivePhotos = emptyList(),
+                    searchQuery = ""
+                )
+            }
+
             try {
-                Timber.d("DRIVE: Mulai mengambil sesi $sessionId")
+                val session = _uiState.value.sessions
+                    .firstOrNull { it.id == sessionId }
+                    ?: throw Exception("Sesi tidak ditemukan")
+
+                val folderUrl = session.driveFolderId
+                    ?.takeIf { it.isNotBlank() }
+                    ?: throw Exception("Link folder Google Drive kosong")
+
+                val rootFolderId = extractDriveFolderId(folderUrl)
+                    ?: throw Exception("ID folder Google Drive tidak valid")
+
+                loadDriveFolderContents(rootFolderId)
+
+                _uiState.update {
+                    it.copy(driveRootFolderId = rootFolderId)
+                }
+
+                Timber.d("DRIVE: Struktur folder sesi berhasil dimuat")
+
+            } catch (e: Exception) {
+                Timber.e(e, "DRIVE ERROR: Gagal memuat struktur folder")
 
                 _uiState.update {
                     it.copy(
-                        isLoading = true,
+                        driveFolders = emptyList(),
                         drivePhotos = emptyList(),
                         filteredDrivePhotos = emptyList()
                     )
                 }
+            } finally {
+                _uiState.update { it.copy(isLoading = false) }
+            }
+        }
+    }
 
-                val session = _uiState.value.sessions
-                    .firstOrNull { it.id == sessionId }
+    private fun extractDriveFolderId(value: String): String? {
+        val regex = Regex("""/folders/([a-zA-Z0-9_-]+)""")
 
-                if (session == null) {
-                    Timber.e("DRIVE: Sesi $sessionId tidak ditemukan")
-                    throw Exception("Sesi tidak ditemukan")
-                }
+        return regex.find(value)?.groupValues?.get(1)
+            ?: value.takeIf {
+                !it.contains("/") && it.isNotBlank()
+            }
+    }
 
-                Timber.d("DRIVE: Sesi ditemukan: ${session.location}")
+    // Mengambil folder dan foto pada satu tingkat folder saja.
+    private suspend fun loadDriveFolderContents(folderId: String) {
+        val folders = driveRepository.getFolders(folderId)
+        val photos = driveRepository.getPhotos(folderId)
 
-                val folderUrl = session.driveFolderId
+        _uiState.update {
+            it.copy(
+                driveFolders = folders,
+                drivePhotos = photos,
+                filteredDrivePhotos = photos
+            )
+        }
 
-                Timber.d("DRIVE: Folder URL = $folderUrl")
+        Timber.d(
+            "DRIVE: ${folders.size} folder dan ${photos.size} foto ditemukan"
+        )
+    }
 
-                if (folderUrl.isNullOrBlank()) {
-                    throw Exception("Link folder Google Drive kosong")
-                }
+    // Dipanggil saat pengguna menekan salah satu folder.
+    fun openDriveFolder(folder: DriveFolderItem) {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isLoading = true,
+                    searchQuery = "",
+                    driveFolderStack = it.driveFolderStack + folder,
+                    driveFolders = emptyList(),
+                    drivePhotos = emptyList(),
+                    filteredDrivePhotos = emptyList()
+                )
+            }
 
-                val photos = driveRepository.getPhotos(folderUrl)
-
-                Timber.d("DRIVE: Total foto ditemukan = ${photos.size}")
-
-                photos.forEach {
-                    Timber.d("DRIVE FOTO: ${it.name} | ${it.id}")
-                }
-
-                _uiState.update {
-                    it.copy(
-                        drivePhotos = photos,
-                        filteredDrivePhotos = photos,
-                        isLoading = false
-                    )
-                }
-
+            try {
+                loadDriveFolderContents(folder.id)
             } catch (e: Exception) {
-                Timber.e(e, "DRIVE ERROR: Gagal mengambil foto")
+                Timber.e(e, "DRIVE ERROR: Gagal membuka folder ${folder.name}")
 
                 _uiState.update {
                     it.copy(
+                        driveFolderStack = it.driveFolderStack.dropLast(1),
+                        driveFolders = emptyList(),
                         drivePhotos = emptyList(),
-                        filteredDrivePhotos = emptyList(),
-                        isLoading = false
+                        filteredDrivePhotos = emptyList()
                     )
                 }
+            } finally {
+                _uiState.update { it.copy(isLoading = false) }
+            }
+        }
+    }
+
+    // Kembali satu tingkat folder.
+    fun backDriveFolder() {
+        val stack = _uiState.value.driveFolderStack
+
+        if (stack.isEmpty()) {
+            selectSession(null)
+            return
+        }
+
+        val newStack = stack.dropLast(1)
+        val parentFolderId = newStack.lastOrNull()?.id
+            ?: _uiState.value.driveRootFolderId
+            ?: return
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isLoading = true,
+                    driveFolderStack = newStack,
+                    driveFolders = emptyList(),
+                    drivePhotos = emptyList(),
+                    filteredDrivePhotos = emptyList(),
+                    searchQuery = ""
+                )
+            }
+
+            try {
+                loadDriveFolderContents(parentFolderId)
+            } catch (e: Exception) {
+                Timber.e(e, "DRIVE ERROR: Gagal kembali ke folder sebelumnya")
+            } finally {
+                _uiState.update { it.copy(isLoading = false) }
             }
         }
     }
@@ -186,6 +273,9 @@ class CariFotoHomeViewModel : ViewModel() {
                 selectedLocation = location,
                 selectedSessionId = null,
                 drivePhotos = emptyList(),
+                driveFolders = emptyList(),
+                driveFolderStack = emptyList(),
+                driveRootFolderId = null,
                 filteredDrivePhotos = emptyList()
             )
         }
@@ -198,18 +288,12 @@ class CariFotoHomeViewModel : ViewModel() {
                 selectedDate = date,
                 selectedSessionId = null,
                 drivePhotos = emptyList(),
+                driveFolders = emptyList(),
+                driveFolderStack = emptyList(),
+                driveRootFolderId = null,
                 filteredDrivePhotos = emptyList()
             )
         }
-        applyFilter()
-    }
-
-
-    fun selectHourRange(hourRange: String) {
-        _uiState.update {
-            it.copy(selectedHourRange = hourRange)
-        }
-
         applyFilter()
     }
 
@@ -221,6 +305,9 @@ class CariFotoHomeViewModel : ViewModel() {
                 selectedSessionId = sessionId,
                 searchQuery = "",
                 selectedHourRange = "",
+                driveFolders = emptyList(),
+                driveFolderStack = emptyList(),
+                driveRootFolderId = null,
                 drivePhotos = emptyList(),
                 filteredDrivePhotos = emptyList()
             )
@@ -230,8 +317,6 @@ class CariFotoHomeViewModel : ViewModel() {
             loadPhotosFromDrive(sessionId)
         }
     }
-
-
     fun updateSearchQuery(query: String) {
         _uiState.update {
             it.copy(searchQuery = query)

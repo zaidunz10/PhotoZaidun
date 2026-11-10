@@ -25,6 +25,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.zaidun.carifoto.data.model.DrivePhotoItem
 import com.zaidun.carifoto.data.remote.CariFotoDriveHelper
+import com.zaidun.carifoto.data.model.DriveFolderItem
 import com.zaidun.carifoto.data.remote.CariFotoPhotoDto
 import com.zaidun.carifoto.data.remote.CariFotoSessionDto
 
@@ -227,16 +228,16 @@ fun CariFotoHomeScreen(
                 }
             }
         } else {
-            // Tampilan isi folder yang dipilih.
             SessionGallery(
                 session = selectedSession,
+                folders = state.driveFolders,
+                folderStack = state.driveFolderStack,
                 photos = state.filteredDrivePhotos,
                 searchQuery = state.searchQuery,
                 isLoading = state.isLoading,
                 onSearchChange = viewModel::updateSearchQuery,
-                onBack = {
-                    viewModel.selectSession(null)
-                }
+                onOpenFolder = viewModel::openDriveFolder,
+                onBack = viewModel::backDriveFolder
             )
         }
     }
@@ -357,15 +358,19 @@ private fun SessionFolderCard(
 @Composable
 private fun SessionGallery(
     session: CariFotoSessionDto,
+    folders: List<DriveFolderItem>,
+    folderStack: List<DriveFolderItem>,
     photos: List<DrivePhotoItem>,
     searchQuery: String,
     isLoading: Boolean,
     onSearchChange: (String) -> Unit,
+    onOpenFolder: (DriveFolderItem) -> Unit,
     onBack: () -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
+        // Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -397,8 +402,31 @@ private fun SessionGallery(
             }
         }
 
+        // Breadcrumb lokasi folder
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "📁 Sesi",
+                color = if (folderStack.isEmpty()) PurplePrimary else TextSecondary,
+                fontSize = 12.sp
+            )
+
+            folderStack.forEach { folder ->
+                Text(
+                    text = "  /  ${folder.name}",
+                    color = PurplePrimary,
+                    fontSize = 12.sp,
+                    maxLines = 1
+                )
+            }
+        }
+
         Text(
-            text = "Preview foto",
+            text = "Isi Folder",
             color = TextPrimary,
             fontWeight = FontWeight.Bold,
             fontSize = 18.sp
@@ -406,6 +434,7 @@ private fun SessionGallery(
 
         Spacer(Modifier.height(10.dp))
 
+        // Pencarian foto
         OutlinedTextField(
             value = searchQuery,
             onValueChange = onSearchChange,
@@ -426,15 +455,7 @@ private fun SessionGallery(
             )
         )
 
-        Spacer(Modifier.height(12.dp))
-
-        Text(
-            text = "${photos.size} foto ditemukan",
-            color = TextSecondary,
-            fontSize = 12.sp
-        )
-
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(14.dp))
 
         when {
             isLoading -> {
@@ -450,32 +471,118 @@ private fun SessionGallery(
                 }
             }
 
-            photos.isEmpty() -> {
+            folders.isEmpty() && photos.isEmpty() -> {
                 EmptyState(
-                    title = "Foto tidak ditemukan",
-                    description = "Belum ada foto pada folder Google Drive ini."
+                    title = "Folder masih kosong",
+                    description = "Belum ada folder atau foto di lokasi ini."
                 )
             }
 
             else -> {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
+                LazyColumn(
                     modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(bottom = 20.dp)
                 ) {
+                    // Tampilkan subfolder
                     items(
-                        items = photos,
-                        key = { it.id }
-                    ) { photo ->
-                        PhotoPreviewCard(photo = photo)
+                        items = folders,
+                        key = { "folder_${it.id}" }
+                    ) { folder ->
+                        DriveFolderCard(
+                            folder = folder,
+                            onClick = {
+                                onOpenFolder(folder)
+                            }
+                        )
+                    }
+
+                    // Informasi jumlah foto
+                    if (photos.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "${photos.size} foto ditemukan",
+                                color = TextSecondary,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(
+                                    top = 8.dp,
+                                    bottom = 2.dp
+                                )
+                            )
+                        }
+
+                        // Tampilkan foto
+                        items(
+                            items = photos,
+                            key = { "photo_${it.id}" }
+                        ) { photo ->
+                            PhotoPreviewCard(photo = photo)
+                        }
                     }
                 }
             }
         }
     }
 }
+
+@Composable
+private fun DriveFolderCard(
+    folder: DriveFolderItem,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = SurfaceDark
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            BorderDark
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(15.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "📁",
+                fontSize = 27.sp
+            )
+
+            Spacer(Modifier.width(12.dp))
+
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = folder.name,
+                    color = TextPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                Text(
+                    text = "Folder Google Drive",
+                    color = TextSecondary,
+                    fontSize = 11.sp
+                )
+            }
+
+            Text(
+                text = "BUKA  ›",
+                color = PurplePrimary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
 
 
 @Composable

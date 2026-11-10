@@ -1,6 +1,7 @@
 
 package com.zaidun.carifoto.presentation.home
 
+import com.zaidun.carifoto.data.model.DriveFolderItem
 import com.zaidun.carifoto.data.remote.CariFotoPhotoDto
 import com.zaidun.carifoto.data.remote.CariFotoSessionDto
 import com.zaidun.carifoto.data.remote.CariFotoUserDto
@@ -25,6 +26,11 @@ data class CariFotoHomeUiState(
     val sessions: List<CariFotoSessionDto> = emptyList(),
     val photos: List<CariFotoPhotoDto> = emptyList(),
     val filteredPhotos: List<CariFotoPhotoDto> = emptyList(),
+
+    val driveFolders: List<DriveFolderItem> = emptyList(),
+    val driveFolderStack: List<DriveFolderItem> = emptyList(),
+    val driveRootFolderId: String? = null,
+
 
     val selectedPhotoForPayment: CariFotoPhotoDto? = null,
     val selectedSessionForPayment: CariFotoSessionDto? = null,
