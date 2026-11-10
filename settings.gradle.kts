@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 rootProject.name = "PhotoZaidun"
 // Test
 include(":app")
+include(":carifoto")
