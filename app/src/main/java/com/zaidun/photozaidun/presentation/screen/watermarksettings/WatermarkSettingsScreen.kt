@@ -272,11 +272,14 @@ fun WatermarkSettingsScreen(
             ) {
                 // Pickers
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val photoButtonLabel = if (uiState.previewUri.isNotBlank()) "Ganti Foto" else "Pilih Foto Preview"
+                    val logoButtonLabel = if (uiState.watermarkUri.isNotBlank()) "Ganti Logo" else "Pilih Logo"
+
                     OutlinedButton(onClick = { previewPicker.launch(arrayOf("image/*")) }, Modifier.weight(1f)) {
-                        Text("Ganti Foto")
+                        Text(photoButtonLabel)
                     }
                     Button(onClick = { picker.launch(arrayOf("image/*")) }, Modifier.weight(1f)) {
-                        Text("Ganti Logo")
+                        Text(logoButtonLabel)
                     }
                 }
 
@@ -292,14 +295,10 @@ fun WatermarkSettingsScreen(
                 Spacer(Modifier.height(24.dp))
 
                 // FILE INFO SETTINGS
-                Text("Info File (Nama & Part)", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text("Info File & Timestamp", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = showFile, onCheckedChange = { showFile = it })
                     Text("Tampilkan Nama File")
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = showPart, onCheckedChange = { showPart = it })
-                    Text("Tampilkan Part")
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = showTimestamp, onCheckedChange = { showTimestamp = it })
