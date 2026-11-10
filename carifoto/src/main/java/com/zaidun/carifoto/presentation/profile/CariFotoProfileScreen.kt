@@ -208,9 +208,15 @@ fun CariFotoProfileScreen(
                         VerticalDivider(modifier = Modifier.height(36.dp), color = Color(0xFFE2E8F0))
 
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Aktif", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF22C55E))
+                            val isGuest = user == null || user.id.isBlank() || user.id == "guest_rider_001" || user.id.startsWith("guest")
+                            Text(
+                                text = if (isGuest) "Mode Tamu" else "Aktif",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isGuest) PrimaryPurple else Color(0xFF22C55E)
+                            )
                             Spacer(Modifier.height(2.dp))
-                            Text("Status Akun Google", fontSize = 11.sp, color = TextGray)
+                            Text("Status Akun", fontSize = 11.sp, color = TextGray)
                         }
                     }
                 }
@@ -258,23 +264,43 @@ fun CariFotoProfileScreen(
 
                 Spacer(modifier = Modifier.height(28.dp))
 
-                // 4. TOMBOL LOGOUT
-                Button(
-                    onClick = {
-                        authViewModel.logout(context) {
-                            Toast.makeText(context, "Berhasil Keluar Akun", Toast.LENGTH_SHORT).show()
-                            onLogoutFinished()
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Keluar Akun", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                // 4. TOMBOL AUTH (GUEST: "Masuk dengan Google" | LOGGED IN: "Keluar Akun")
+                val isGuest = user == null || user.id.isBlank() || user.id == "guest_rider_001" || user.id.startsWith("guest")
+                if (isGuest) {
+                    Button(
+                        onClick = {
+                            authViewModel.logout(context) {
+                                onLogoutFinished()
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryPurple)
+                    ) {
+                        Icon(Icons.Default.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Masuk dengan Google", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                } else {
+                    Button(
+                        onClick = {
+                            authViewModel.logout(context) {
+                                Toast.makeText(context, "Berhasil Keluar Akun", Toast.LENGTH_SHORT).show()
+                                onLogoutFinished()
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Keluar Akun", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))

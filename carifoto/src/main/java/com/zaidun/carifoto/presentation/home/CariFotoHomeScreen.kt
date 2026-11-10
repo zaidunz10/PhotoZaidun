@@ -4,13 +4,16 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
@@ -27,11 +30,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.zaidun.carifoto.data.model.DriveFolderItem
 import com.zaidun.carifoto.data.model.DrivePhotoItem
 import com.zaidun.carifoto.data.remote.CariFotoSessionDto
+import com.zaidun.carifoto.presentation.auth.CariFotoAuthViewModel
+import com.zaidun.carifoto.utils.CariFotoDownloader
 
 private val BackgroundDark = Color(0xFF100E17)
 private val SurfaceDark = Color(0xFF181520)
@@ -43,10 +51,18 @@ private val TextSecondary = Color(0xFFAAA1B8)
 @Composable
 fun CariFotoHomeScreen(
     viewModel: CariFotoHomeViewModel,
-    onNavigateToOrders: () -> Unit
+    authViewModel: CariFotoAuthViewModel = viewModel(),
+    onNavigateToOrders: () -> Unit,
+    onRequireLogin: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val authUiState by authViewModel.uiState.collectAsStateWithLifecycle()
     var isSearchTriggered by remember { mutableStateOf(false) }
+
+    val isGuest = remember(authUiState.googleUser) {
+        val user = authUiState.googleUser
+        user == null || user.id.isBlank() || user.id == "guest_rider_001" || user.id.startsWith("guest")
+    }
 
     val selectedSession = state.sessions.firstOrNull {
         it.id == state.selectedSessionId
@@ -82,7 +98,7 @@ fun CariFotoHomeScreen(
     }
 
     if (selectedSession == null) {
-        // UNIFIED SCROLL LAZYCOLUMN (Scroll Menyatu agar Card Filter ikut tergulung ke atas & list sesi tampil Full Screen)
+        // UNIFIED SCROLL LAZYCOLUMN
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -305,6 +321,8 @@ fun CariFotoHomeScreen(
                 photos = state.filteredDrivePhotos,
                 searchQuery = state.searchQuery,
                 isLoading = state.isLoading,
+                isGuest = isGuest,
+                onRequireLogin = onRequireLogin,
                 onSearchChange = viewModel::updateSearchQuery,
                 onOpenFolder = viewModel::openDriveFolder,
                 onBack = viewModel::backDriveFolder
@@ -429,179 +447,355 @@ private fun SessionGallery(
     photos: List<DrivePhotoItem>,
     searchQuery: String,
     isLoading: Boolean,
+    isGuest: Boolean,
+    onRequireLogin: () -> Unit,
     onSearchChange: (String) -> Unit,
     onOpenFolder: (DriveFolderItem) -> Unit,
     onBack: () -> Unit
 ) {
     var gridColumnCount by remember { mutableIntStateOf(2) }
+    var selectedPhotoForViewer by remember { mutableStateOf<DrivePhotoItem?>(null) }
+    var selectedPhotoIds by remember { mutableStateOf(setOf<String>()) }
+    val context = LocalContext.current
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .pointerInput(Unit) {
-                detectTransformGestures { _, _, zoom, _ ->
-                    if (zoom < 0.82f && gridColumnCount == 2) {
-                        gridColumnCount = 3
-                    } else if (zoom > 1.18f && gridColumnCount == 3) {
-                        gridColumnCount = 2
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTransformGestures { _, _, zoom, _ ->
+                        if (zoom < 0.82f && gridColumnCount == 2) {
+                            gridColumnCount = 3
+                        } else if (zoom > 1.18f && gridColumnCount == 3) {
+                            gridColumnCount = 2
+                        }
                     }
                 }
-            }
-    ) {
-        // Top Header: Tombol Back & Breadcrumb Sesi (Rapi & Minimalis)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(
-                onClick = onBack,
-                contentPadding = PaddingValues(0.dp)
+            // Top Header: Tombol Back & Breadcrumb Sesi (Rapi & Minimalis)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "‹ Kembali",
-                    color = PurplePrimary,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                TextButton(
+                    onClick = onBack,
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text(
+                        text = "‹ Kembali",
+                        color = PurplePrimary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(Modifier.width(14.dp))
+
+                // Breadcrumb Sesi & Folder
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "📁 Sesi",
+                        color = if (folderStack.isEmpty()) PurplePrimary else TextSecondary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    folderStack.forEach { folder ->
+                        Text(
+                            text = "  /  ${folder.name}",
+                            color = PurplePrimary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                    }
+                }
+
+                Spacer(Modifier.width(6.dp))
+
+                // STICKY GRID TOGGLE BUTTON AT TOPBAR (Grid: 2 vs Grid: 3)
+                Surface(
+                    color = SurfaceDark,
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, BorderDark),
+                    modifier = Modifier.clickable {
+                        gridColumnCount = if (gridColumnCount == 2) 3 else 2
+                    }
+                ) {
+                    Text(
+                        text = if (gridColumnCount == 2) "Grid: 2" else "Grid: 3",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PurplePrimary,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
             }
 
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.height(4.dp))
 
-            // Breadcrumb Sesi & Folder
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = "📁 Sesi",
-                    color = if (folderStack.isEmpty()) PurplePrimary else TextSecondary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold
-                )
+            when {
+                isLoading -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color = PurplePrimary
+                        )
+                    }
+                }
 
-                folderStack.forEach { folder ->
-                    Text(
-                        text = "  /  ${folder.name}",
-                        color = PurplePrimary,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1
+                folders.isEmpty() && photos.isEmpty() -> {
+                    EmptyState(
+                        title = "Folder masih kosong",
+                        description = "Belum ada folder atau foto di lokasi ini."
                     )
+                }
+
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        contentPadding = PaddingValues(bottom = 70.dp)
+                    ) {
+                        // Tampilkan subfolder
+                        items(
+                            items = folders,
+                            key = { "folder_${it.id}" }
+                        ) { folder ->
+                            DriveFolderCard(
+                                folder = folder,
+                                onClick = {
+                                    onOpenFolder(folder)
+                                }
+                            )
+                        }
+
+                        // Informasi jumlah foto & Petunjuk Multi-Select
+                        if (photos.isNotEmpty()) {
+                            item {
+                                Text(
+                                    text = "${photos.size} foto ditemukan (Tahan foto untuk pilih banyak)",
+                                    color = TextSecondary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
+                                )
+                            }
+
+                            // Tampilkan foto dalam Barisan Chunks (2 Kolom atau 3 Kolom)
+                            val photoRows = photos.chunked(gridColumnCount)
+
+                            items(
+                                items = photoRows,
+                                key = { row -> "row_${row.firstOrNull()?.id ?: System.currentTimeMillis()}" }
+                            ) { rowPhotos ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    rowPhotos.forEach { photo ->
+                                        val isSelected = selectedPhotoIds.contains(photo.id)
+                                        Box(modifier = Modifier.weight(1f)) {
+                                            PhotoPreviewCard(
+                                                photo = photo,
+                                                columnCount = gridColumnCount,
+                                                isSelected = isSelected,
+                                                onClick = {
+                                                    if (selectedPhotoIds.isNotEmpty()) {
+                                                        // Toggle selection in multi-select mode
+                                                        selectedPhotoIds = if (isSelected) {
+                                                            selectedPhotoIds - photo.id
+                                                        } else {
+                                                            selectedPhotoIds + photo.id
+                                                        }
+                                                    } else {
+                                                        // Open full screen viewer on normal tap
+                                                        selectedPhotoForViewer = photo
+                                                    }
+                                                },
+                                                onLongClick = {
+                                                    // Trigger multi-select mode on long press
+                                                    selectedPhotoIds = if (isSelected) {
+                                                        selectedPhotoIds - photo.id
+                                                    } else {
+                                                        selectedPhotoIds + photo.id
+                                                    }
+                                                }
+                                            )
+                                        }
+                                    }
+
+                                    // Isi slot kosong jika jumlah item dalam baris kurang dari gridColumnCount
+                                    repeat(gridColumnCount - rowPhotos.size) {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        Spacer(Modifier.height(4.dp))
-
-        when {
-            isLoading -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
+        // FLOATING MULTI-SELECT BOTTOM BAR
+        if (selectedPhotoIds.isNotEmpty()) {
+            Surface(
+                color = Color(0xFF23143D),
+                shape = RoundedCornerShape(16.dp),
+                shadowElevation = 10.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    CircularProgressIndicator(
-                        color = PurplePrimary
+                    Text(
+                        text = "${selectedPhotoIds.size} Foto Terpilih",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
                     )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { selectedPhotoIds = emptySet() }) {
+                            Text("Batal", color = TextSecondary, fontSize = 13.sp)
+                        }
+
+                        Button(
+                            onClick = {
+                                if (isGuest) {
+                                    Toast.makeText(context, "Harap login Google terlebih dahulu untuk mengunduh foto!", Toast.LENGTH_LONG).show()
+                                    onRequireLogin()
+                                } else {
+                                    val selectedItems = photos.filter { selectedPhotoIds.contains(it.id) }
+                                    selectedItems.forEach { item ->
+                                        CariFotoDownloader.downloadPhoto(context, item.id, item.name)
+                                    }
+                                    selectedPhotoIds = emptySet()
+                                }
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = PurplePrimary)
+                        ) {
+                            Text("Unduh (${selectedPhotoIds.size}) ⬇️", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White)
+                        }
+                    }
+                }
+            }
+        }
+
+        // FULL SCREEN PHOTO VIEWER DIALOG (TAP BIASA)
+        selectedPhotoForViewer?.let { photo ->
+            FullScreenPhotoViewerDialog(
+                photo = photo,
+                isGuest = isGuest,
+                onRequireLogin = onRequireLogin,
+                onDismiss = { selectedPhotoForViewer = null }
+            )
+        }
+    }
+}
+
+// FULL SCREEN PHOTO VIEWER DIALOG (TAP BIASA)
+@Composable
+private fun FullScreenPhotoViewerDialog(
+    photo: DrivePhotoItem,
+    isGuest: Boolean,
+    onRequireLogin: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.95f))
+                .clickable { onDismiss() },
+            contentAlignment = Alignment.Center
+        ) {
+            AsyncImage(
+                model = photo.imageUrl,
+                contentDescription = photo.name,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit
+            )
+
+            // Header Top Bar: Nama File & Tombol Close ✕
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = photo.name,
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+
+                TextButton(onClick = onDismiss) {
+                    Text("✕", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
-            folders.isEmpty() && photos.isEmpty() -> {
-                EmptyState(
-                    title = "Folder masih kosong",
-                    description = "Belum ada folder atau foto di lokasi ini."
-                )
-            }
-
-            else -> {
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 20.dp)
+            // Bottom Bar: Tombol Unduh Foto HD
+            Surface(
+                color = Color.Black.copy(alpha = 0.8f),
+                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Tampilkan subfolder
-                    items(
-                        items = folders,
-                        key = { "folder_${it.id}" }
-                    ) { folder ->
-                        DriveFolderCard(
-                            folder = folder,
-                            onClick = {
-                                onOpenFolder(folder)
+                    Text(photo.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    Text("Format Foto HD Asli dari Google Drive", color = TextSecondary, fontSize = 11.sp)
+                    Spacer(Modifier.height(14.dp))
+
+                    Button(
+                        onClick = {
+                            if (isGuest) {
+                                onDismiss()
+                                Toast.makeText(context, "Harap login Google terlebih dahulu untuk mengunduh foto!", Toast.LENGTH_LONG).show()
+                                onRequireLogin()
+                            } else {
+                                CariFotoDownloader.downloadPhoto(context, photo.id, photo.name)
                             }
-                        )
-                    }
-
-                    // Informasi jumlah foto & Tombol Ubah Layout Grid (2 Kolom / 3 Kolom)
-                    if (photos.isNotEmpty()) {
-                        item {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 8.dp, bottom = 6.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "${photos.size} foto ditemukan",
-                                    color = TextSecondary,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.weight(1f, fill = false)
-                                )
-
-                                Spacer(Modifier.width(8.dp))
-
-                                Surface(
-                                    color = SurfaceDark,
-                                    shape = RoundedCornerShape(8.dp),
-                                    border = BorderStroke(1.dp, BorderDark),
-                                    modifier = Modifier.clickable {
-                                        gridColumnCount = if (gridColumnCount == 2) 3 else 2
-                                    }
-                                ) {
-                                    Text(
-                                        text = if (gridColumnCount == 2) "Grid: 2 Kolom" else "Grid: 3 Kolom",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = PurplePrimary,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                    )
-                                }
-                            }
-                        }
-
-                        // Tampilkan foto dalam Barisan Chunks (2 Kolom atau 3 Kolom)
-                        val photoRows = photos.chunked(gridColumnCount)
-
-                        items(
-                            items = photoRows,
-                            key = { row -> "row_${row.firstOrNull()?.id ?: System.currentTimeMillis()}" }
-                        ) { rowPhotos ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                rowPhotos.forEach { photo ->
-                                    Box(modifier = Modifier.weight(1f)) {
-                                        PhotoPreviewCard(
-                                            photo = photo,
-                                            columnCount = gridColumnCount
-                                        )
-                                    }
-                                }
-
-                                // Isi slot kosong jika jumlah item dalam baris kurang dari gridColumnCount
-                                repeat(gridColumnCount - rowPhotos.size) {
-                                    Spacer(modifier = Modifier.weight(1f))
-                                }
-                            }
-                        }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = PurplePrimary)
+                    ) {
+                        Text("Unduh Foto HD ⬇️", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
                     }
                 }
             }
@@ -667,57 +861,61 @@ private fun DriveFolderCard(
     }
 }
 
+// Kartu Foto Murni Full Gambar (Bebas Footer Teks) + Multi-Select & Long Press
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PhotoPreviewCard(
     photo: DrivePhotoItem,
-    columnCount: Int = 2
+    columnCount: Int = 2,
+    isSelected: Boolean = false,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = SurfaceDark
         ),
         border = BorderStroke(
-            1.dp,
-            BorderDark
+            if (isSelected) 2.dp else 1.dp,
+            if (isSelected) PurplePrimary else BorderDark
         )
     ) {
-        Column {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(if (columnCount == 2) 175.dp else 125.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF0F172A)),
-                contentAlignment = Alignment.Center
-            ) {
-                AsyncImage(
-                    model = photo.imageUrl,
-                    contentDescription = photo.name,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit
-                )
-            }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(if (columnCount == 2) 185.dp else 130.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFF0F172A)),
+            contentAlignment = Alignment.Center
+        ) {
+            AsyncImage(
+                model = photo.imageUrl,
+                contentDescription = photo.name,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit
+            )
 
-            Column(
-                modifier = Modifier.padding(6.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = photo.name,
-                    color = TextPrimary,
-                    fontSize = if (columnCount == 2) 11.sp else 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Text(
-                    text = "Google Drive",
-                    color = TextSecondary,
-                    fontSize = if (columnCount == 2) 10.sp else 8.sp
-                )
+            // Selection Checkmark Badge
+            if (isSelected) {
+                Surface(
+                    color = Color(0xFF22C55E),
+                    shape = CircleShape,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text("✓", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
     }

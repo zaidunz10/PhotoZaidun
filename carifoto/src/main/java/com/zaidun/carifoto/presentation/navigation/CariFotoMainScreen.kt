@@ -175,7 +175,9 @@ fun CariFotoMainContent(
             composable(CariFotoTabRoute.HOME.route) {
                 CariFotoHomeScreen(
                     viewModel = homeViewModel,
-                    onNavigateToOrders = { navController.navigate(CariFotoTabRoute.ORDERS.route) }
+                    authViewModel = authViewModel,
+                    onNavigateToOrders = { navController.navigate(CariFotoTabRoute.ORDERS.route) },
+                    onRequireLogin = onLogoutFinished
                 )
             }
 

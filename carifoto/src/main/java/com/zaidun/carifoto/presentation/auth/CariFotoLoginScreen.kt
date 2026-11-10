@@ -6,29 +6,35 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
+import com.zaidun.carifoto.R
 
-private val ScreenBg = Color(0xFFF4F7FB)
-private val PrimaryPurple = Color(0xFF7B4FE0)
-private val DarkPurple = Color(0xFF23143D)
-private val TextDark = Color(0xFF1E293B)
-private val TextGray = Color(0xFF64748B)
+private val BackgroundDark = Color(0xFF100E17)
+private val SurfaceDark = Color(0xFF181520)
+private val BorderDark = Color(0xFF302A3A)
+private val PurplePrimary = Color(0xFF7B4FE0)
+private val TextPrimary = Color(0xFFFFFFFF)
+private val TextSecondary = Color(0xFFAAA1B8)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,145 +44,137 @@ fun CariFotoLoginScreen(
 ) {
     val uiState by authViewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val activity = LocalContext.current as? Activity
 
     Scaffold(
-        containerColor = ScreenBg
+        containerColor = BackgroundDark
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 20.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxWidth()
+            Spacer(Modifier.height(16.dp))
+
+            // Official Logo Image
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = SurfaceDark,
+                shadowElevation = 6.dp,
+                border = BorderStroke(1.5.dp, PurplePrimary.copy(alpha = 0.6f)),
+                modifier = Modifier.size(92.dp)
             ) {
-                Spacer(Modifier.height(24.dp))
-
-                // App Brand Icon
-                Surface(
-                    color = PrimaryPurple,
-                    shape = CircleShape,
-                    shadowElevation = 6.dp,
-                    modifier = Modifier.size(80.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Default.Search,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(40.dp)
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(16.dp))
-
-                Text(
-                    "CariFoto Rider",
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = DarkPurple
-                )
-
-                Spacer(Modifier.height(4.dp))
-
-                Text(
-                    "Cari & Beli Foto Jepretan Jalananmu Secara Instan",
-                    fontSize = 13.sp,
-                    color = TextGray,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(Modifier.height(32.dp))
-
-                // Feature Highlight Cards
-                FeatureCard(
-                    title = "Foto Utuh Presisi (Anti-Crop)",
-                    description = "Lihat jepretan aksi motor/cornering kamu tanpa terpotong atas/bawah."
-                )
-
-                Spacer(Modifier.height(12.dp))
-
-                FeatureCard(
-                    title = "Bayar Instan via QRIS",
-                    description = "Dukungan GoPay, OVO, ShopeePay, DANA, LinkAja & BCA Mobile."
-                )
-
-                Spacer(Modifier.height(12.dp))
-
-                FeatureCard(
-                    title = "Download HD Bebas Watermark",
-                    description = "Foto jernih langsung dari server Google Drive CDN milik fotografer."
-                )
-            }
-
-            // Action Login Buttons
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                val activity = LocalContext.current as? Activity
-                Button(
-                    onClick = {
-                        activity?.let { act ->
-                            authViewModel.login(act) {
-                                Toast.makeText(act, "Selamat Datang di CariFoto!", Toast.LENGTH_SHORT).show()
-                                onLoginSuccess()
-                            }
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(54.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryPurple),
-                    enabled = !uiState.isLoggingIn
-                ) {
-                    if (uiState.isLoggingIn) {
-                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-                    } else {
-                        Text(
-                            "Masuk dengan Google",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(12.dp))
-
-                OutlinedButton(
-                    onClick = {
-                        onLoginSuccess()
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = DarkPurple),
-                    border = BorderStroke(1.dp, Color(0xFFCBD5E1))
-                ) {
-                    Text(
-                        "Jelajahi Foto Dulu (Tamu)",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = DarkPurple
+                Box(contentAlignment = Alignment.Center) {
+                    AsyncImage(
+                        model = R.drawable.logo,
+                        contentDescription = "CariFoto Logo",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(20.dp)),
+                        contentScale = ContentScale.Crop
                     )
                 }
+            }
 
-                Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(14.dp))
 
+            Text(
+                text = "CariFoto Rider",
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary
+            )
+
+            Spacer(Modifier.height(4.dp))
+
+            Text(
+                text = "Cari & Beli Foto Jepretan Jalananmu Secara Instan",
+                fontSize = 12.sp,
+                color = TextSecondary,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(Modifier.height(20.dp))
+
+            // Feature Highlight Cards (Dark Minimalist)
+            FeatureCard(
+                title = "Foto Utuh Presisi (Anti-Crop)",
+                description = "Lihat jepretan aksi motor/cornering kamu tanpa terpotong atas/bawah."
+            )
+
+            Spacer(Modifier.height(10.dp))
+
+            FeatureCard(
+                title = "Bayar Instan via QRIS",
+                description = "Dukungan GoPay, OVO, ShopeePay, DANA, LinkAja & BCA Mobile."
+            )
+
+            Spacer(Modifier.height(10.dp))
+
+            FeatureCard(
+                title = "Download HD Bebas Watermark",
+                description = "Foto jernih langsung disimpan otomatis ke folder Downloads/Galeri HP."
+            )
+
+            Spacer(Modifier.height(24.dp))
+
+            // ACTION BUTTON 1: MASUK DENGAN GOOGLE (Sangat Jelas & Menonjol)
+            Button(
+                onClick = {
+                    activity?.let { act ->
+                        authViewModel.login(act) {
+                            Toast.makeText(act, "Selamat Datang di CariFoto!", Toast.LENGTH_SHORT).show()
+                            onLoginSuccess()
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = PurplePrimary),
+                enabled = !uiState.isLoggingIn
+            ) {
+                if (uiState.isLoggingIn) {
+                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(22.dp))
+                } else {
+                    Text(
+                        text = "Masuk dengan Google",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // ACTION BUTTON 2: JELAJAHI FOTO DULU (TAMU) (Sangat Besar & Jelas)
+            Button(
+                onClick = {
+                    authViewModel.loginGuest {
+                        onLoginSuccess()
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = SurfaceDark),
+                border = BorderStroke(1.5.dp, PurplePrimary)
+            ) {
                 Text(
-                    "PhotoZaidun Ecosystem © 2026",
-                    fontSize = 10.sp,
-                    color = Color.LightGray
+                    text = "Jelajahi Foto Dulu (Tamu)",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
                 )
             }
+
+            Spacer(Modifier.height(24.dp))
         }
     }
 }
@@ -188,27 +186,27 @@ private fun FeatureCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+        border = BorderStroke(1.dp, BorderDark)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 Icons.Default.CheckCircle,
                 contentDescription = null,
-                tint = PrimaryPurple,
-                modifier = Modifier.size(24.dp)
+                tint = PurplePrimary,
+                modifier = Modifier.size(20.dp)
             )
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(10.dp))
             Column {
-                Text(title, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextDark)
+                Text(title, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                 Spacer(Modifier.height(2.dp))
-                Text(description, fontSize = 11.sp, color = TextGray)
+                Text(description, fontSize = 11.sp, color = TextSecondary)
             }
         }
     }
