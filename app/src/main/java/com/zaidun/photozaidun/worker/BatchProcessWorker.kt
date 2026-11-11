@@ -49,7 +49,7 @@ class BatchProcessWorker @AssistedInject constructor(
         }
         logStep("Worker Started")
 
-        val parallelism = (Runtime.getRuntime().availableProcessors()).coerceIn(8, 16)
+        val parallelism = (Runtime.getRuntime().availableProcessors()).coerceIn(12, 18)
         val semaphore = Semaphore(parallelism)
         try {
             setForeground(createForegroundInfo("Menyiapkan pemrosesan..."))
