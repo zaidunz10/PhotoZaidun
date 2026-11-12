@@ -3,6 +3,7 @@ package com.zaidun.photozaidun
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.zaidun.photozaidun.data.ads.AdMobManager
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 import timber.log.Timber
@@ -18,6 +19,7 @@ class PhotoZaidunApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         Timber.plant(Timber.DebugTree())
+        AdMobManager.initialize(this)
 
         android.util.Log.e("PHOTOZAIDUN", "PhotoZaidunApp onCreate")
     }

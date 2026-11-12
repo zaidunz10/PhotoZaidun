@@ -18,6 +18,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import com.zaidun.photozaidun.data.ads.AdMobManager
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -223,9 +224,14 @@ fun HomeScreen(
                     onClick = {
                         if (locationText.isNotBlank()) {
                             activity?.let { act ->
-                                viewModel.refreshTokenForUpload(act) { token ->
-                                    viewModel.confirmLocationAndExport(locationText.trim(), token)
-                                    onNavigateToExportLoading()
+                                AdMobManager.showInterstitialAdBeforeExport(
+                                    activity = act,
+                                    userEmail = uiState.userEmail
+                                ) {
+                                    viewModel.refreshTokenForUpload(act) { token ->
+                                        viewModel.confirmLocationAndExport(locationText.trim(), token)
+                                        onNavigateToExportLoading()
+                                    }
                                 }
                             }
                         }
@@ -260,7 +266,7 @@ fun HomeScreen(
             // 1. TOP HEADER: Avatar Profil & Salam Dinamis (Pagi/Siang/Sore/Malam)
             // =========================================================
             val greeting = remember { getDynamicGreeting() }
-            val userName = uiState.userName.ifBlank { "Zidan Syahid" }
+            val userName = uiState.userName.ifBlank { "GUest" }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),

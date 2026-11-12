@@ -139,7 +139,7 @@ fun ProfileScreen(
 
                 // Foto Profil Avatar
                 val photoUrl = uiState.googleUser?.photoUrl
-                val userName = uiState.googleUser?.name ?: "Zidan Syahid"
+                val userName = uiState.googleUser?.name ?: "GUest"
                 val initials = userName.trim().split(" ").take(2).mapNotNull { it.firstOrNull()?.uppercase() }.joinToString("")
 
                 Surface(
@@ -207,7 +207,7 @@ fun ProfileScreen(
 
                 // Nama & Email Google
                 Text(
-                    text = uiState.googleUser?.name ?: "Zidan Syahid",
+                    text = uiState.googleUser?.name ?: "Guest",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = TitleDark

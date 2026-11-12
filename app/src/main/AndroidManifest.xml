@@ -5,7 +5,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
 
     <!-- Pastikan Service WorkManager dideklarasikan dengan tipe (Jika menggunakan custom) -->
     <!-- Jika standar, cukup tambahkan permission di atas -->
@@ -19,6 +19,10 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.PhotoZaidun">
+
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-4183656778309205~2192892295"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"
