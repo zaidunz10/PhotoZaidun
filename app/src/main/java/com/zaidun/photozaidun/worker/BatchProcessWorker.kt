@@ -70,6 +70,7 @@ class BatchProcessWorker @AssistedInject constructor(
                 .d("Enqueue Upload ${folder.name} token=$tokenPreview")
             val sessionId = inputData.getLong("session_id", -1L) // Ambil Session ID dari Input Data
             val isPublished = inputData.getBoolean("is_published", true)
+            val locationName = inputData.getString("location") ?: ""
             val request =
                 OneTimeWorkRequestBuilder<DriveUploadWorker>()
                     .addTag("UPLOAD")
@@ -79,7 +80,8 @@ class BatchProcessWorker @AssistedInject constructor(
                             KEY_ACCESS_TOKEN to freshToken,
                             DriveUploadWorker.KEY_EXPECTED_COUNT to expectedCount,
                             "session_id" to sessionId,
-                            "is_published" to isPublished
+                            "is_published" to isPublished,
+                            "location" to locationName
                         )
                     )
                     .build()

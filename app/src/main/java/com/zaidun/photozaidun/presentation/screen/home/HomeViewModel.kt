@@ -518,17 +518,17 @@ class HomeViewModel @Inject constructor(
                     response.id
                 }
                 
-                // Teruskan ID Sesi ke worker agar nanti bisa di-update dengan link Google Drive
-                startBatchProcess(accessToken, targetSessionId, _uiState.value.isPublishedForRider)
+                // Teruskan ID Sesi & Lokasi ke worker agar nanti bisa di-update dengan link Google Drive
+                startBatchProcess(accessToken, targetSessionId, _uiState.value.isPublishedForRider, location)
             } catch (e: Exception) {
                 Timber.e(e, "Supabase: Gagal menyimpan/mengecek sesi fotografer")
                 // Fallback (jika misal gagal konek Supabase, tetap lanjutkan export tapi tanpa sessionId)
-                startBatchProcess(accessToken, -1L, _uiState.value.isPublishedForRider)
+                startBatchProcess(accessToken, -1L, _uiState.value.isPublishedForRider, location)
             }
         }
     }
 
-    private fun startBatchProcess(accessToken: String, sessionId: Long, isPublished: Boolean) {
+    private fun startBatchProcess(accessToken: String, sessionId: Long, isPublished: Boolean, location: String = "") {
         // PERBAIKAN INDENTASI & GUARD
         if (_uiState.value.isProcessing) {
             Timber.tag("EXPORT").d("Proses sedang berjalan, mengabaikan klik ganda.")
@@ -545,7 +545,8 @@ class HomeViewModel @Inject constructor(
                     "input_folder" to _uiState.value.selectedFolder, 
                     KEY_ACCESS_TOKEN to accessToken,
                     "session_id" to sessionId,
-                    "is_published" to isPublished
+                    "is_published" to isPublished,
+                    "location" to location
                 )
             )
             .build()

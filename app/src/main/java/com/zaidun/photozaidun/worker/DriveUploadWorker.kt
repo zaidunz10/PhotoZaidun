@@ -181,7 +181,9 @@ class DriveUploadWorker @AssistedInject constructor(
             if (!finalDriveLink.isNullOrBlank()) {
                 try {
                     val userId = preferences.userId.first()
-                    val locationName = folder.parentFile?.name?.ifBlank { null } ?: "Sesi Fotografer"
+                    val locationName = inputData.getString("location")?.ifBlank { null }
+                        ?: folder.parentFile?.name?.ifBlank { null }
+                        ?: "Sesi Fotografer"
                     val todayDateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
 
                     // 1. Cek dulu apakah sesi dengan fotografer_id DAN drive_folder_id SAMA sudah ada di Supabase
