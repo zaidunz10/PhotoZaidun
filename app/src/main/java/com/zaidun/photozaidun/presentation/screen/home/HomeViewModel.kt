@@ -28,6 +28,9 @@ import com.zaidun.photozaidun.data.remote.SessionLocationDto
 import com.zaidun.photozaidun.data.remote.SessionResponseDto
 import com.zaidun.photozaidun.data.remote.SupabaseHelper
 import com.zaidun.photozaidun.data.remote.UserDto
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import com.zaidun.photozaidun.domain.model.PhotoItem
 import io.github.jan.supabase.postgrest.postgrest
 import com.zaidun.photozaidun.worker.DriveUploadWorker.Companion.KEY_ACCESS_TOKEN
@@ -472,20 +475,22 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val userId = _uiState.value.userId
-                
-                // 1. Cek dulu apakah sesi untuk fotografer & lokasi ini sudah ada di Supabase
+                val todayDateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+
+                // 1. Cek dulu apakah sesi untuk fotografer, lokasi, DAN tanggal hari ini sudah ada di Supabase
                 val existingSessions = SupabaseHelper.client.postgrest["sessions"]
                     .select {
                         filter {
                             eq("photographer_id", userId)
                             eq("location", location)
+                            eq("session_date", todayDateStr)
                         }
                     }.decodeList<SessionResponseDto>()
 
                 val existingId = existingSessions.lastOrNull()?.id
 
                 val targetSessionId = if (existingId != null && existingId > 0L) {
-                    Timber.d("Supabase: Menggunakan kembali Sesi yang sudah ada dengan ID: $existingId")
+                    Timber.d("Supabase: Menggunakan kembali Sesi Hari Ini ($todayDateStr) dengan ID: $existingId")
                     existingId
                 } else {
                     val priceSingleVal = preferences.defaultPhotoPrice.first().takeIf { it > 0 } ?: 10000
@@ -495,6 +500,7 @@ class HomeViewModel @Inject constructor(
                     val sessionDto = SessionInsertDto(
                         photographerId = userId,
                         location = location,
+                        sessionDate = todayDateStr,
                         whatsappNumber = _uiState.value.photographerWa,
                         instagramLink = _uiState.value.photographerIg,
                         priceSingle = priceSingleVal,
@@ -502,13 +508,13 @@ class HomeViewModel @Inject constructor(
                         priceDiscount = discountPriceVal,
                         isPublished = _uiState.value.isPublishedForRider
                     )
-                    
+
                     val response = SupabaseHelper.client.postgrest["sessions"]
                         .insert(sessionDto) {
                             select()
                         }.decodeSingle<SessionResponseDto>()
-                    
-                    Timber.d("Supabase: Sesi Fotografer baru berhasil disimpan dengan ID: ${response.id}")
+
+                    Timber.d("Supabase: Sesi Fotografer baru hari ini ($todayDateStr) berhasil disimpan dengan ID: ${response.id}")
                     response.id
                 }
                 

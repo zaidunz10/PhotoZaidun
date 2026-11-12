@@ -20,6 +20,7 @@ data class UserDto(
 data class SessionInsertDto(
     @SerialName("photographer_id") val photographerId: String,
     val location: String,
+    @SerialName("session_date") val sessionDate: String? = null,
     @SerialName("whatsapp_number") val whatsappNumber: String,
     @SerialName("instagram_link") val instagramLink: String,
     @SerialName("price_single") val priceSingle: Int = 10000,
