@@ -24,7 +24,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -77,6 +77,7 @@ dependencies {
     // Navigation & DataStore
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.datastore)
+    implementation("com.google.android.play:app-update-ktx:2.1.0")
 
     // Supabase & Ktor & Serialization
     implementation(libs.supabase.postgrest)

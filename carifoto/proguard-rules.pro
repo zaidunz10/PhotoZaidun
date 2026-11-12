@@ -1,21 +1,59 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# ==========================================
+# GOOGLE DRIVE API & GOOGLE API CLIENT
+# ==========================================
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+-keepattributes *Annotation*
+-keepattributes Signature
+-keepattributes InnerClasses
+-keepattributes EnclosingMethod
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+-keep class com.google.api.services.drive.model.** { *; }
+-keep class com.google.api.services.drive.** { *; }
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+-keep class com.google.api.client.** { *; }
+-keep class com.google.api.services.** { *; }
+
+-keep class * extends com.google.api.client.json.GenericJson { *; }
+-keep class * extends com.google.api.client.util.GenericData { *; }
+
+-keepclassmembers class * {
+    @com.google.api.client.util.Key <fields>;
+}
+
+# Ignore optional legacy library warnings in R8
+-dontwarn org.ietf.jgss.**
+-dontwarn org.apache.commons.logging.**
+-dontwarn org.apache.http.**
+-dontwarn com.google.api.client.**
+-dontwarn com.google.android.play.**
+
+
+# ==========================================
+# KOTLINX SERIALIZATION
+# ==========================================
+
+-keepclassmembers class ** {
+    @kotlinx.serialization.SerialName <fields>;
+}
+
+-keep,includedescriptorclasses class **$$serializer { *; }
+
+-keepclassmembers class ** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+
+
+# ==========================================
+# SUPABASE DTO MODELS
+# ==========================================
+
+-keep class com.zaidun.carifoto.data.remote.** { *; }
+
+
+# ==========================================
+# REFLECTION SUPPORT
+# ==========================================
+
+-keepattributes RuntimeVisibleAnnotations
+-keepattributes RuntimeInvisibleAnnotations
+-keepattributes AnnotationDefault

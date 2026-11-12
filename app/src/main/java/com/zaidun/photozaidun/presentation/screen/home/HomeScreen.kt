@@ -458,9 +458,13 @@ fun HomeScreen(
 
                         val storage = uiState.driveStorage
                         val usedStr = storage?.usedBytes?.toReadableSize() ?: "12,4 GB"
-                        val totalStr = storage?.totalBytes?.toReadableSize() ?: "15 GB"
-                        val freeStr = storage?.freeBytes?.toReadableSize() ?: "2,6 GB"
-                        val percentValue = if (storage != null) (storage.percent * 100f) else 82.7f
+                        val totalStr = when {
+                            storage == null -> "5 TB"
+                            storage.totalBytes <= 0L -> "5 TB (Workspace)"
+                            else -> storage.totalBytes.toReadableSize()
+                        }
+                        val freeStr = if (storage != null && storage.totalBytes > 0L) storage.freeBytes.toReadableSize() else "Sangat Luas"
+                        val percentValue = if (storage != null && storage.totalBytes > 0L) (storage.percent * 100f) else 5.0f
 
                         val animatedPercent by animateFloatAsState(
                             targetValue = percentValue,

@@ -47,9 +47,9 @@ android {
 
         targetSdk = 36
 
-        versionCode = 3
+        versionCode = 4
 
-        versionName = "1.0.2"
+        versionName = "1.0.3"
 
         testInstrumentationRunner =
             "androidx.test.runner.AndroidJUnitRunner"
@@ -158,6 +158,7 @@ dependencies {
     implementation("com.google.http-client:google-http-client-gson:1.45.0")
     implementation("com.google.android.gms:play-services-auth:21.2.0")
     implementation("com.google.android.gms:play-services-ads:23.0.0")
+    implementation("com.google.android.play:app-update-ktx:2.1.0")
     implementation(libs.androidx.navigation.compose)
 
     implementation(libs.hilt.android)
