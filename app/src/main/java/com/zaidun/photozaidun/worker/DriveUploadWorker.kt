@@ -17,13 +17,19 @@ import com.zaidun.photozaidun.data.drive.DriveServiceFactory
 import com.zaidun.photozaidun.data.drive.GoogleDriveRepository
 import com.zaidun.photozaidun.data.drive.copyToCache
 import com.zaidun.photozaidun.data.local.datastore.UserPreferencesDataStore
+import com.zaidun.photozaidun.data.remote.SessionInsertDto
+import com.zaidun.photozaidun.data.remote.SessionResponseDto
 import com.zaidun.photozaidun.data.remote.SessionUpdateDriveDto
 import com.zaidun.photozaidun.data.remote.SupabaseHelper
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.filter.FilterOperator
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.sync.Semaphore
@@ -57,7 +63,7 @@ class DriveUploadWorker @AssistedInject constructor(
         private const val NOTIFICATION_ID = 101
 
         // JUMLAH UPLOAD BERSAMAAN
-        private const val UPLOAD_PARALLELISM = 20
+        private const val UPLOAD_PARALLELISM = 25
     }
 
     override suspend fun doWork(): Result {
@@ -170,21 +176,65 @@ class DriveUploadWorker @AssistedInject constructor(
 
             Timber.tag("DriveUpload").d("Part Folder ID = $partFolderId | Final Link: $finalDriveLink")
 
-            // UPDATE KE SUPABASE: Masukkan Link Google Drive & is_published ke tabel `sessions`
-            val sessionId = inputData.getLong("session_id", -1L)
+            // UPDATE / SIMPAN KE SUPABASE DENGAN KUNCI UTAMA: LINK GOOGLE DRIVE (drive_folder_id)
             val isPublished = inputData.getBoolean("is_published", true)
-            if (sessionId != -1L && !finalDriveLink.isNullOrBlank()) {
+            if (!finalDriveLink.isNullOrBlank()) {
                 try {
-                    val updateDto = SessionUpdateDriveDto(
-                        driveFolderId = finalDriveLink,
-                        isPublished = isPublished
-                    )
-                    SupabaseHelper.client.postgrest.from("sessions").update(updateDto) {
-                        filter { eq("id", sessionId) }
+                    val userId = preferences.userId.first()
+                    val locationName = folder.parentFile?.name?.ifBlank { null } ?: "Sesi Fotografer"
+                    val todayDateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+
+                    // 1. Cek dulu apakah sesi dengan fotografer_id DAN drive_folder_id SAMA sudah ada di Supabase
+                    val existingSessions = SupabaseHelper.client.postgrest["sessions"]
+                        .select {
+                            filter {
+                                eq("photographer_id", userId)
+                                eq("drive_folder_id", finalDriveLink)
+                            }
+                        }.decodeList<SessionResponseDto>()
+
+                    val existingId = existingSessions.lastOrNull()?.id
+
+                    if (existingId != null && existingId > 0L) {
+                        // LINK DRIVE SAMA ➔ Reuse Sesi yang sudah ada (Jangan buat baru)
+                        val updateDto = SessionUpdateDriveDto(
+                            driveFolderId = finalDriveLink,
+                            isPublished = isPublished
+                        )
+                        SupabaseHelper.client.postgrest.from("sessions").update(updateDto) {
+                            filter { eq("id", existingId) }
+                        }
+                        Timber.tag("DriveUpload").d("Supabase: Link Drive SAMA -> Reuse Sesi ID: $existingId")
+                    } else {
+                        // LINK DRIVE BERBEDA ➔ Buat Baris Sesi BARU di Supabase!
+                        val priceSingleVal = preferences.defaultPhotoPrice.first().takeIf { it > 0 } ?: 10000
+                        val minQtyVal = preferences.minQtyDiscount.first()
+                        val discountPriceVal = preferences.priceDiscount.first()
+                        val wa = preferences.photographerWa.first()
+                        val ig = preferences.photographerIg.first()
+
+                        val newSessionDto = SessionInsertDto(
+                            photographerId = userId,
+                            location = locationName,
+                            sessionDate = todayDateStr,
+                            driveFolderId = finalDriveLink,
+                            whatsappNumber = wa,
+                            instagramLink = ig,
+                            priceSingle = priceSingleVal,
+                            minQtyDiscount = minQtyVal,
+                            priceDiscount = discountPriceVal,
+                            isPublished = isPublished
+                        )
+
+                        val response = SupabaseHelper.client.postgrest["sessions"]
+                            .insert(newSessionDto) {
+                                select()
+                            }.decodeSingle<SessionResponseDto>()
+
+                        Timber.tag("DriveUpload").d("Supabase: Link Drive BERBEDA -> Berhasil buat Sesi BARU ID: ${response.id}")
                     }
-                    Timber.tag("DriveUpload").d("Supabase: WebViewLink & isPublished berhasil diupdate ke sessions ($sessionId)")
                 } catch (e: Exception) {
-                    Timber.e(e, "Supabase: Gagal update WebViewLink ke sessions")
+                    Timber.e(e, "Supabase: Gagal menyimpan/mengecek sesi berdasarkan Link Drive")
                 }
             }
 
