@@ -302,4 +302,13 @@ class GoogleDriveRepository @Inject constructor() {
 
         return uploaded.id
     }
+
+    fun deleteFolder(drive: Drive, folderId: String) {
+        try {
+            drive.files().delete(folderId).execute()
+            Timber.d("Google Drive: Folder ID $folderId berhasil dihapus!")
+        } catch (e: Exception) {
+            Timber.e(e, "Google Drive: Gagal menghapus folder ID $folderId")
+        }
+    }
 }

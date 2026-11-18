@@ -107,12 +107,43 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
-    fun deleteSession(sessionId: Long, onSuccess: () -> Unit = {}) {
+    private fun extractDriveFolderId(urlOrId: String?): String? {
+        if (urlOrId.isNullOrBlank()) return null
+        if (urlOrId.contains("/folders/")) {
+            return urlOrId.split("/folders/")[1]?.split("?")?.get(0)?.split("/")?.get(0)
+        }
+        return urlOrId.takeIf { !it.contains("/") }
+    }
+
+    fun deleteSession(
+        sessionId: Long,
+        driveFolderUrl: String? = null,
+        deleteFromDrive: Boolean = false,
+        onSuccess: () -> Unit = {}
+    ) {
         viewModelScope.launch {
             try {
                 _uiState.update { it.copy(isLoading = true) }
+
+                // 1. Hapus dari Supabase `sessions`
                 SupabaseHelper.client.postgrest["sessions"].delete {
                     filter { eq("id", sessionId) }
+                }
+
+                // 2. Hapus folder dari Google Drive jika opsi deleteFromDrive diaktifkan
+                if (deleteFromDrive && !driveFolderUrl.isNullOrBlank()) {
+                    val token = preferences.driveAccessToken.first()
+                    if (token.isNotBlank()) {
+                        try {
+                            val driveService = driveServiceFactory.create(token)
+                            val folderId = extractDriveFolderId(driveFolderUrl)
+                            if (folderId != null) {
+                                driveRepository.deleteFolder(driveService, folderId)
+                            }
+                        } catch (e: Exception) {
+                            Timber.e(e, "Gagal menghapus folder di Google Drive")
+                        }
+                    }
                 }
 
                 _uiState.update { state ->
@@ -122,10 +153,10 @@ class DashboardViewModel @Inject constructor(
                     )
                 }
 
-                Timber.d("Berhasil menghapus sesi ID $sessionId dari Supabase")
+                Timber.d("Berhasil menghapus sesi ID $sessionId dari Supabase & Drive=$deleteFromDrive")
                 onSuccess()
             } catch (e: Exception) {
-                Timber.e(e, "Gagal menghapus sesi $sessionId dari Supabase")
+                Timber.e(e, "Gagal menghapus sesi $sessionId")
                 _uiState.update { it.copy(isLoading = false) }
                 onSuccess()
             }

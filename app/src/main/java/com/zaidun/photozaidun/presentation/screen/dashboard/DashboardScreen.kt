@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -276,54 +277,147 @@ fun DashboardScreen(
                 }
             }
 
-            // POP-UP CONFIRMATION ALERT DIALOG SEBELUM HAPUS SESI
+            // POP-UP CONFIRMATION ALERT DIALOG DUA TAHAP SEBELUM HAPUS SESI & GOOGLE DRIVE
             sessionToDelete?.let { session ->
-                AlertDialog(
-                    onDismissRequest = {
-                        if (isDeletingId == null) sessionToDelete = null
-                    },
-                    title = {
-                        Text("Konfirmasi Hapus Sesi", fontWeight = FontWeight.Bold, color = TextPrimary)
-                    },
-                    text = {
-                        Text(
-                            "Apakah Anda yakin ingin menghapus sesi ${session.location.ifBlank { "ini" }} dari Rider?",
-                            color = TextSecondary,
-                            fontSize = 13.sp
-                        )
-                    },
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                val id = session.id
-                                isDeletingId = id
-                                viewModel.deleteSession(id) {
-                                    isDeletingId = null
-                                    sessionToDelete = null
+                var deleteDriveFolder by remember { mutableStateOf(false) }
+                var showSecondDriveAlert by remember { mutableStateOf(false) }
+
+                if (!showSecondDriveAlert) {
+                    // ALERT 1: Konfirmasi Hapus Sesi dari Rider + Opsi Checkbox Google Drive
+                    AlertDialog(
+                        onDismissRequest = {
+                            if (isDeletingId == null) sessionToDelete = null
+                        },
+                        title = {
+                            Text("Konfirmasi Hapus Sesi", fontWeight = FontWeight.Bold, color = TextPrimary)
+                        },
+                        text = {
+                            Column {
+                                Text(
+                                    "Apakah Anda yakin ingin menghapus sesi ${session.location.ifBlank { "ini" }} dari Rider?",
+                                    color = TextSecondary,
+                                    fontSize = 13.sp
+                                )
+
+                                Spacer(Modifier.height(14.dp))
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { deleteDriveFolder = !deleteDriveFolder }
+                                ) {
+                                    Checkbox(
+                                        checked = deleteDriveFolder,
+                                        onCheckedChange = { deleteDriveFolder = it },
+                                        colors = CheckboxDefaults.colors(checkedColor = Color(0xFFEF4444), uncheckedColor = TextSecondary)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        "Apakah folder yang dari Google Drive mau dihapus juga?",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (deleteDriveFolder) Color(0xFFEF4444) else TextPrimary
+                                    )
                                 }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
-                            enabled = isDeletingId == null,
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            if (isDeletingId == session.id) {
-                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp))
-                            } else {
-                                Text("Hapus", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 12.sp)
                             }
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(
-                            onClick = { sessionToDelete = null },
-                            enabled = isDeletingId == null
-                        ) {
-                            Text("Batal", color = TextSecondary, fontSize = 12.sp)
-                        }
-                    },
-                    containerColor = SurfaceDark,
-                    shape = RoundedCornerShape(18.dp)
-                )
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    if (deleteDriveFolder) {
+                                        // Tampilkan Alert Konfirmasi Ke-2 Khusus Google Drive
+                                        showSecondDriveAlert = true
+                                    } else {
+                                        val id = session.id
+                                        isDeletingId = id
+                                        viewModel.deleteSession(
+                                            sessionId = id,
+                                            driveFolderUrl = session.driveFolderId,
+                                            deleteFromDrive = false
+                                        ) {
+                                            isDeletingId = null
+                                            sessionToDelete = null
+                                        }
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                                enabled = isDeletingId == null,
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                if (isDeletingId == session.id) {
+                                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp))
+                                } else {
+                                    Text("Hapus", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 12.sp)
+                                }
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = { sessionToDelete = null },
+                                enabled = isDeletingId == null
+                            ) {
+                                Text("Batal", color = TextSecondary, fontSize = 12.sp)
+                            }
+                        },
+                        containerColor = SurfaceDark,
+                        shape = RoundedCornerShape(18.dp)
+                    )
+                } else {
+                    // ALERT 2: Konfirmasi Hapus Folder Google Drive Secara Permanen
+                    AlertDialog(
+                        onDismissRequest = {
+                            if (isDeletingId == null) showSecondDriveAlert = false
+                        },
+                        title = {
+                            Text("⚠️ Hapus Folder Google Drive?", fontWeight = FontWeight.Bold, color = Color(0xFFEF4444))
+                        },
+                        text = {
+                            Text(
+                                "Anda yakin ingin DELETE folder beserta SELURUH FOTO di Google Drive secara permanen?",
+                                color = TextPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    val id = session.id
+                                    isDeletingId = id
+                                    viewModel.deleteSession(
+                                        sessionId = id,
+                                        driveFolderUrl = session.driveFolderId,
+                                        deleteFromDrive = true
+                                    ) {
+                                        isDeletingId = null
+                                        sessionToDelete = null
+                                        showSecondDriveAlert = false
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                                enabled = isDeletingId == null,
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                if (isDeletingId == session.id) {
+                                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp))
+                                } else {
+                                    Text("YA, HAPUS PERMANEN", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 12.sp)
+                                }
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = { showSecondDriveAlert = false },
+                                enabled = isDeletingId == null
+                            ) {
+                                Text("Batal", color = TextSecondary, fontSize = 12.sp)
+                            }
+                        },
+                        containerColor = SurfaceDark,
+                        shape = RoundedCornerShape(18.dp)
+                    )
+                }
             }
         }
     }
