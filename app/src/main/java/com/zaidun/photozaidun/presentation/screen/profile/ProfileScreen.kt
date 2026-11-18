@@ -1,10 +1,7 @@
 package com.zaidun.photozaidun.presentation.screen.profile
 
 import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -32,7 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil3.compose.SubcomposeAsyncImage
+import coil3.compose.AsyncImage
 import com.zaidun.photozaidun.data.remote.SupabaseHelper
 import com.zaidun.photozaidun.data.remote.UserDto
 import com.zaidun.photozaidun.presentation.component.motion.PressAnimatedButton
@@ -50,7 +47,9 @@ private val AccentPurple = Color(0xFF7B4FE0)
 @Composable
 fun ProfileScreen(
     uiState: SettingsUiState,
-    onBack: () -> Unit,
+    onBack: () -> Unit = {},
+    onLoginGoogle: () -> Unit = {},
+    onLogoutGoogle: () -> Unit = {},
     onSaveSuccess: (
         whatsapp: String,
         instagram: String,
@@ -78,13 +77,7 @@ fun ProfileScreen(
         listOf("BCA", "Mandiri", "BRI", "BNI", "SeaBank", "Bank Jago", "GoPay", "OVO", "DANA", "ShopeePay", "LinkAja")
     }
     var bankDropdownExpanded by remember { mutableStateOf(false) }
-
     var isSaving by remember { mutableStateOf(false) }
-    var screenVisible by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        screenVisible = true
-    }
 
     LaunchedEffect(
         uiState.photographerWa,
@@ -114,209 +107,215 @@ fun ProfileScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Profil & Rekening Fotografer", fontWeight = FontWeight.Bold, color = TitleDark) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = TitleDark)
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = ScreenBg)
             )
         }
     ) { padding ->
-        AnimatedVisibility(
-            visible = screenVisible,
-            enter = fadeIn(animationSpec = tween(400)) + slideInVertically(animationSpec = tween(400), initialOffsetY = { -it / 10 })
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 20.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = 20.dp)
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Foto Profil Avatar (Ringan & Cepat)
+            val photoUrl = uiState.googleUser?.photoUrl
+            val userName = uiState.googleUser?.name ?: "Guest"
+            val initials = userName.trim().split(" ").take(2).mapNotNull { it.firstOrNull()?.uppercase() }.joinToString("")
+
+            Surface(
+                shape = CircleShape,
+                shadowElevation = 2.dp,
+                modifier = Modifier.size(80.dp)
             ) {
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Foto Profil Avatar
-                val photoUrl = uiState.googleUser?.photoUrl
-                val userName = uiState.googleUser?.name ?: "GUest"
-                val initials = userName.trim().split(" ").take(2).mapNotNull { it.firstOrNull()?.uppercase() }.joinToString("")
-
-                Surface(
-                    shape = CircleShape,
-                    shadowElevation = 4.dp,
-                    modifier = Modifier.size(96.dp)
-                ) {
-                    if (!photoUrl.isNullOrBlank()) {
-                        SubcomposeAsyncImage(
-                            model = photoUrl,
-                            contentDescription = "Profile Photo",
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(CircleShape),
-                            contentScale = ContentScale.Crop,
-                            error = {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(Color(0xFFD6C7FF)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = initials.ifEmpty { "ZS" },
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 30.sp,
-                                        color = Color(0xFF2E184D)
-                                    )
-                                }
-                            },
-                            loading = {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(Color(0xFFD6C7FF)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = initials.ifEmpty { "ZS" },
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 30.sp,
-                                        color = Color(0xFF2E184D)
-                                    )
-                                }
-                            }
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color(0xFFD6C7FF)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = initials.ifEmpty { "ZS" },
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 30.sp,
-                                color = Color(0xFF2E184D)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Nama & Email Google
-                Text(
-                    text = uiState.googleUser?.name ?: "Guest",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TitleDark
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = uiState.googleUser?.email ?: "Belum Login",
-                    fontSize = 12.sp,
-                    color = TextGray
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // =========================================================
-                // CARD 1: INFORMASI FOTOGRAFER (WA & IG)
-                // =========================================================
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = CardWhite),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                if (!photoUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = photoUrl,
+                        contentDescription = "Profile Photo",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color(0xFFD6C7FF)),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Text(
-                            "KONTAK & MEDSOS",
-                            fontSize = 11.sp,
+                            text = initials.ifEmpty { "ZS" },
                             fontWeight = FontWeight.Bold,
-                            color = AccentPurple
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Form WhatsApp
-                        OutlinedTextField(
-                            value = whatsapp,
-                            onValueChange = { whatsapp = it },
-                            label = { Text("Nomor WhatsApp", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
-                            placeholder = { Text("08123456789", fontSize = 12.sp, color = Color(0xFF94A3B8)) },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                            leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = AccentPurple, modifier = Modifier.size(20.dp)) },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = AccentPurple,
-                                unfocusedBorderColor = Color(0xFFCBD5E1),
-                                focusedTextColor = Color(0xFF1E293B),
-                                unfocusedTextColor = Color(0xFF1E293B),
-                                focusedContainerColor = Color.White,
-                                unfocusedContainerColor = Color.White
-                            )
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Form Instagram
-                        OutlinedTextField(
-                            value = instagram,
-                            onValueChange = { instagram = it },
-                            label = { Text("Username Instagram", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
-                            placeholder = { Text("@zaidun_photo", fontSize = 12.sp, color = Color(0xFF94A3B8)) },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            singleLine = true,
-                            leadingIcon = { Icon(Icons.Default.CameraAlt, contentDescription = null, tint = AccentPurple, modifier = Modifier.size(20.dp)) },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = AccentPurple,
-                                unfocusedBorderColor = Color(0xFFCBD5E1),
-                                focusedTextColor = Color(0xFF1E293B),
-                                unfocusedTextColor = Color(0xFF1E293B),
-                                focusedContainerColor = Color.White,
-                                unfocusedContainerColor = Color.White
-                            )
+                            fontSize = 26.sp,
+                            color = Color(0xFF2E184D)
                         )
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-                // =========================================================
-                // CARD 2: TARIF & HARGA FOTO DISKON
-                // =========================================================
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = CardWhite),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            // Nama & Email Google
+            Text(
+                text = uiState.googleUser?.name ?: "Guest",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = TitleDark
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = uiState.googleUser?.email ?: "Belum Login Google",
+                fontSize = 12.sp,
+                color = TextGray
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // TOMBOL LOGIN / LOGOUT GOOGLE DI PROFILE SCREEN
+            if (uiState.googleUser != null) {
+                OutlinedButton(
+                    onClick = onLogoutGoogle,
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, Color(0xFFEF4444)),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            "TARIF & DISKON FOTO",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = AccentPurple
+                    Text("Keluar Akun Google", color = Color(0xFFEF4444), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            } else {
+                Button(
+                    onClick = onLoginGoogle,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentPurple),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    Text("🌐 Masuk dengan Google", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // =========================================================
+            // CARD 1: INFORMASI FOTOGRAFER (WA & IG)
+            // =========================================================
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = CardWhite),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "KONTAK & MEDSOS",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AccentPurple
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = whatsapp,
+                        onValueChange = { whatsapp = it },
+                        label = { Text("Nomor WhatsApp", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
+                        placeholder = { Text("08123456789", fontSize = 12.sp, color = Color(0xFF94A3B8)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = AccentPurple, modifier = Modifier.size(20.dp)) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentPurple,
+                            unfocusedBorderColor = Color(0xFFCBD5E1),
+                            focusedTextColor = Color(0xFF1E293B),
+                            unfocusedTextColor = Color(0xFF1E293B),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
                         )
+                    )
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                        // Harga Eceran per Foto
+                    OutlinedTextField(
+                        value = instagram,
+                        onValueChange = { instagram = it },
+                        label = { Text("Username Instagram", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
+                        placeholder = { Text("@zaidun_photo", fontSize = 12.sp, color = Color(0xFF94A3B8)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true,
+                        leadingIcon = { Icon(Icons.Default.CameraAlt, contentDescription = null, tint = AccentPurple, modifier = Modifier.size(20.dp)) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentPurple,
+                            unfocusedBorderColor = Color(0xFFCBD5E1),
+                            focusedTextColor = Color(0xFF1E293B),
+                            unfocusedTextColor = Color(0xFF1E293B),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // =========================================================
+            // CARD 2: TARIF & HARGA FOTO DISKON
+            // =========================================================
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = CardWhite),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "TARIF & DISKON FOTO",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AccentPurple
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = photoPrice,
+                        onValueChange = { photoPrice = it.filter(Char::isDigit) },
+                        label = { Text("Harga Standar per Foto (Rp)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
+                        placeholder = { Text("10000", fontSize = 12.sp, color = Color(0xFF94A3B8)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        leadingIcon = { Icon(Icons.Default.AttachMoney, contentDescription = null, tint = AccentPurple, modifier = Modifier.size(20.dp)) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentPurple,
+                            unfocusedBorderColor = Color(0xFFCBD5E1),
+                            focusedTextColor = Color(0xFF1E293B),
+                            unfocusedTextColor = Color(0xFF1E293B),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                         OutlinedTextField(
-                            value = photoPrice,
-                            onValueChange = { photoPrice = it.filter(Char::isDigit) },
-                            label = { Text("Harga Standar per Foto (Rp)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
-                            placeholder = { Text("10000", fontSize = 12.sp, color = Color(0xFF94A3B8)) },
-                            modifier = Modifier.fillMaxWidth(),
+                            value = minQtyText,
+                            onValueChange = { minQtyText = it.filter(Char::isDigit) },
+                            label = { Text("Min. Foto Grosir", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                            placeholder = { Text("3", fontSize = 12.sp, color = Color(0xFF94A3B8)) },
+                            modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp),
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            leadingIcon = { Icon(Icons.Default.AttachMoney, contentDescription = null, tint = AccentPurple, modifier = Modifier.size(20.dp)) },
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = AccentPurple,
                                 unfocusedBorderColor = Color(0xFFCBD5E1),
@@ -327,226 +326,190 @@ fun ProfileScreen(
                             )
                         )
 
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Diskon Paket Grosir (Min Qty & Harga Diskon)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = minQtyText,
-                                onValueChange = { minQtyText = it.filter(Char::isDigit) },
-                                label = { Text("Min. Foto Grosir", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
-                                placeholder = { Text("3", fontSize = 12.sp, color = Color(0xFF94A3B8)) },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = AccentPurple,
-                                    unfocusedBorderColor = Color(0xFFCBD5E1),
-                                    focusedTextColor = Color(0xFF1E293B),
-                                    unfocusedTextColor = Color(0xFF1E293B),
-                                    focusedContainerColor = Color.White,
-                                    unfocusedContainerColor = Color.White
-                                )
+                        OutlinedTextField(
+                            value = discountPriceText,
+                            onValueChange = { discountPriceText = it.filter(Char::isDigit) },
+                            label = { Text("Harga Paket Diskon (Rp)", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                            placeholder = { Text("25000", fontSize = 12.sp, color = Color(0xFF94A3B8)) },
+                            modifier = Modifier.weight(1.2f),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = AccentPurple,
+                                unfocusedBorderColor = Color(0xFFCBD5E1),
+                                focusedTextColor = Color(0xFF1E293B),
+                                unfocusedTextColor = Color(0xFF1E293B),
+                                focusedContainerColor = Color.White,
+                                unfocusedContainerColor = Color.White
                             )
-
-                            OutlinedTextField(
-                                value = discountPriceText,
-                                onValueChange = { discountPriceText = it.filter(Char::isDigit) },
-                                label = { Text("Harga Paket Diskon (Rp)", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
-                                placeholder = { Text("25000", fontSize = 12.sp, color = Color(0xFF94A3B8)) },
-                                modifier = Modifier.weight(1.2f),
-                                shape = RoundedCornerShape(12.dp),
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = AccentPurple,
-                                    unfocusedBorderColor = Color(0xFFCBD5E1),
-                                    focusedTextColor = Color(0xFF1E293B),
-                                    unfocusedTextColor = Color(0xFF1E293B),
-                                    focusedContainerColor = Color.White,
-                                    unfocusedContainerColor = Color.White
-                                )
-                            )
-                        }
+                        )
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-                // =========================================================
-                // CARD 3: REKENING PENCAIRAN SALDO (DROPDOWN BANK)
-                // =========================================================
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = CardWhite),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            "REKENING PENCAIRAN SALDO",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = AccentPurple
+            // =========================================================
+            // CARD 3: REKENING PENCAIRAN SALDO (DROPDOWN BANK)
+            // =========================================================
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = CardWhite),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "REKENING PENCAIRAN SALDO",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AccentPurple
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    ExposedDropdownMenuBox(
+                        expanded = bankDropdownExpanded,
+                        onExpandedChange = { bankDropdownExpanded = !bankDropdownExpanded },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = bankName,
+                            onValueChange = { },
+                            readOnly = true,
+                            label = { Text("Nama Bank / e-Wallet", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = bankDropdownExpanded) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(),
+                            shape = RoundedCornerShape(12.dp),
+                            leadingIcon = { Icon(Icons.Default.AccountBalance, contentDescription = null, tint = AccentPurple, modifier = Modifier.size(20.dp)) },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = AccentPurple,
+                                unfocusedBorderColor = Color(0xFFCBD5E1),
+                                focusedTextColor = Color(0xFF1E293B),
+                                unfocusedTextColor = Color(0xFF1E293B),
+                                focusedContainerColor = Color.White,
+                                unfocusedContainerColor = Color.White
+                            )
                         )
 
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Dropdown Bank / e-Wallet
-                        ExposedDropdownMenuBox(
+                        ExposedDropdownMenu(
                             expanded = bankDropdownExpanded,
-                            onExpandedChange = { bankDropdownExpanded = !bankDropdownExpanded },
-                            modifier = Modifier.fillMaxWidth()
+                            onDismissRequest = { bankDropdownExpanded = false }
                         ) {
-                            OutlinedTextField(
-                                value = bankName,
-                                onValueChange = { },
-                                readOnly = true,
-                                label = { Text("Nama Bank / e-Wallet", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = bankDropdownExpanded) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .menuAnchor(),
-                                shape = RoundedCornerShape(12.dp),
-                                leadingIcon = { Icon(Icons.Default.AccountBalance, contentDescription = null, tint = AccentPurple, modifier = Modifier.size(20.dp)) },
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = AccentPurple,
-                                    unfocusedBorderColor = Color(0xFFCBD5E1),
-                                    focusedTextColor = Color(0xFF1E293B),
-                                    unfocusedTextColor = Color(0xFF1E293B),
-                                    focusedContainerColor = Color.White,
-                                    unfocusedContainerColor = Color.White
+                            bankOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option, fontSize = 13.sp) },
+                                    onClick = {
+                                        bankName = option
+                                        bankDropdownExpanded = false
+                                    }
                                 )
-                            )
-
-                            ExposedDropdownMenu(
-                                expanded = bankDropdownExpanded,
-                                onDismissRequest = { bankDropdownExpanded = false }
-                            ) {
-                                bankOptions.forEach { option ->
-                                    DropdownMenuItem(
-                                        text = { Text(option, fontSize = 13.sp) },
-                                        onClick = {
-                                            bankName = option
-                                            bankDropdownExpanded = false
-                                        }
-                                    )
-                                }
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Nomor Rekening / e-Wallet
-                        OutlinedTextField(
-                            value = accountNumber,
-                            onValueChange = { accountNumber = it.filter(Char::isDigit) },
-                            label = { Text("Nomor Rekening / No. HP", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
-                            placeholder = { Text("1234567890", fontSize = 12.sp, color = Color(0xFF94A3B8)) },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            leadingIcon = { Icon(Icons.Default.CreditCard, contentDescription = null, tint = AccentPurple, modifier = Modifier.size(20.dp)) },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = AccentPurple,
-                                unfocusedBorderColor = Color(0xFFCBD5E1),
-                                focusedTextColor = Color(0xFF1E293B),
-                                unfocusedTextColor = Color(0xFF1E293B),
-                                focusedContainerColor = Color.White,
-                                unfocusedContainerColor = Color.White
-                            )
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Nama Pemilik Rekening
-                        OutlinedTextField(
-                            value = accountHolder,
-                            onValueChange = { accountHolder = it },
-                            label = { Text("Nama Pemilik Rekening", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
-                            placeholder = { Text("Sesuai Buku Tabungan / KTP", fontSize = 12.sp, color = Color(0xFF94A3B8)) },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            singleLine = true,
-                            leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = AccentPurple, modifier = Modifier.size(20.dp)) },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = AccentPurple,
-                                unfocusedBorderColor = Color(0xFFCBD5E1),
-                                focusedTextColor = Color(0xFF1E293B),
-                                unfocusedTextColor = Color(0xFF1E293B),
-                                focusedContainerColor = Color.White,
-                                unfocusedContainerColor = Color.White
-                            )
-                        )
                     }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = accountNumber,
+                        onValueChange = { accountNumber = it.filter(Char::isDigit) },
+                        label = { Text("Nomor Rekening / No. HP", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
+                        placeholder = { Text("1234567890", fontSize = 12.sp, color = Color(0xFF94A3B8)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        leadingIcon = { Icon(Icons.Default.CreditCard, contentDescription = null, tint = AccentPurple, modifier = Modifier.size(20.dp)) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentPurple,
+                            unfocusedBorderColor = Color(0xFFCBD5E1),
+                            focusedTextColor = Color(0xFF1E293B),
+                            unfocusedTextColor = Color(0xFF1E293B),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = accountHolder,
+                        onValueChange = { accountHolder = it },
+                        label = { Text("Nama Pemilik Rekening", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
+                        placeholder = { Text("Sesuai Buku Tabungan / KTP", fontSize = 12.sp, color = Color(0xFF94A3B8)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true,
+                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = AccentPurple, modifier = Modifier.size(20.dp)) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentPurple,
+                            unfocusedBorderColor = Color(0xFFCBD5E1),
+                            focusedTextColor = Color(0xFF1E293B),
+                            unfocusedTextColor = Color(0xFF1E293B),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
+                        )
+                    )
                 }
+            }
 
-                Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-                // Tombol Simpan
-                PressAnimatedButton(
-                    onClick = {
-                        if (whatsapp.isBlank() || instagram.isBlank()) {
-                            Toast.makeText(context, "Harap lengkapi WhatsApp dan Instagram", Toast.LENGTH_SHORT).show()
-                            return@PressAnimatedButton
-                        }
+            // Tombol Simpan
+            PressAnimatedButton(
+                onClick = {
+                    if (whatsapp.isBlank() || instagram.isBlank()) {
+                        Toast.makeText(context, "Harap lengkapi WhatsApp dan Instagram", Toast.LENGTH_SHORT).show()
+                        return@PressAnimatedButton
+                    }
 
-                        val user = uiState.googleUser
-                        if (user == null) {
-                            Toast.makeText(context, "Harap login Google terlebih dahulu", Toast.LENGTH_LONG).show()
-                            return@PressAnimatedButton
-                        }
+                    val priceSingleInt = photoPrice.toIntOrNull() ?: 10000
+                    val minQtyInt = minQtyText.toIntOrNull() ?: 3
+                    val discountPriceInt = discountPriceText.toIntOrNull()
 
-                        isSaving = true
-                        coroutineScope.launch {
-                            try {
+                    isSaving = true
+                    coroutineScope.launch {
+                        try {
+                            val user = uiState.googleUser
+                            if (user != null) {
                                 val userDto = UserDto(
                                     id = user.id,
                                     name = user.name,
                                     email = user.email,
                                     avatarUrl = user.photoUrl
                                 )
-
                                 try {
                                     SupabaseHelper.client.postgrest.from("users").upsert(userDto)
                                 } catch (e: Exception) {
-                                    // Abaikan jika ada perbedaan RLS atau kolom di Supabase users
+                                    // Abaikan
                                 }
-
-                                val priceSingleInt = photoPrice.toIntOrNull() ?: 10000
-                                val minQtyInt = minQtyText.toIntOrNull() ?: 3
-                                val discountPriceInt = discountPriceText.toIntOrNull()
-
-                                onSaveSuccess(whatsapp, instagram, bankName, accountNumber, accountHolder, priceSingleInt, minQtyInt, discountPriceInt)
-
-                                Toast.makeText(context, "Profil & Rekening berhasil disimpan!", Toast.LENGTH_SHORT).show()
-                                onBack()
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "Gagal menyimpan: ${e.message}", Toast.LENGTH_LONG).show()
-                            } finally {
-                                isSaving = false
                             }
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    enabled = !isSaving
-                ) {
-                    if (isSaving) {
-                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-                    } else {
-                        Text("Simpan Profil & Rekening", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    }
-                }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                            onSaveSuccess(whatsapp, instagram, bankName, accountNumber, accountHolder, priceSingleInt, minQtyInt, discountPriceInt)
+                            Toast.makeText(context, "Profil & Rekening berhasil disimpan!", Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Gagal menyimpan: ${e.message}", Toast.LENGTH_LONG).show()
+                        } finally {
+                            isSaving = false
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                enabled = !isSaving
+            ) {
+                if (isSaving) {
+                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                } else {
+                    Text("Simpan Profil & Rekening", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                }
             }
+
+            Spacer(modifier = Modifier.height(28.dp))
         }
     }
 }

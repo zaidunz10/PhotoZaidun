@@ -9,13 +9,17 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -40,6 +44,8 @@ import com.zaidun.carifoto.data.model.DrivePhotoItem
 import com.zaidun.carifoto.data.remote.CariFotoSessionDto
 import com.zaidun.carifoto.presentation.auth.CariFotoAuthViewModel
 import com.zaidun.carifoto.utils.CariFotoDownloader
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 private val BackgroundDark = Color(0xFF100E17)
 private val SurfaceDark = Color(0xFF181520)
@@ -47,6 +53,18 @@ private val BorderDark = Color(0xFF302A3A)
 private val PurplePrimary = Color(0xFF7B4FE0)
 private val TextPrimary = Color(0xFFFFFFFF)
 private val TextSecondary = Color(0xFFAAA1B8)
+
+private fun formatFormattedDayDate(dateStr: String?): String {
+    if (dateStr.isNullOrBlank()) return ""
+    return try {
+        val sdfInput = SimpleDateFormat("yyyy-MM-dd", Locale("id", "ID"))
+        val date = sdfInput.parse(dateStr.take(10))
+        val sdfOutput = SimpleDateFormat("EEEE, dd MMMM yyyy", Locale("id", "ID"))
+        if (date != null) sdfOutput.format(date) else dateStr.take(10)
+    } catch (e: Exception) {
+        dateStr.take(10)
+    }
+}
 
 @Composable
 fun CariFotoHomeScreen(
@@ -493,25 +511,28 @@ private fun SessionGallery(
 
                 Spacer(Modifier.width(14.dp))
 
-                // Breadcrumb Sesi & Folder
+                // Breadcrumb Sesi & Folder (Anti-Cut-Off)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState())
                 ) {
                     Text(
-                        text = "📁 Sesi",
+                        text = "📁 ${session.location}",
                         color = if (folderStack.isEmpty()) PurplePrimary else TextSecondary,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        softWrap = false
                     )
 
                     folderStack.forEach { folder ->
                         Text(
                             text = "  /  ${folder.name}",
                             color = PurplePrimary,
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            maxLines = 1
+                            softWrap = false
                         )
                     }
                 }
@@ -646,51 +667,106 @@ private fun SessionGallery(
             }
         }
 
-        // FLOATING MULTI-SELECT BOTTOM BAR
+        // FLOATING MULTI-SELECT BOTTOM BAR (Super Ramping & Minimalis Pill)
         if (selectedPhotoIds.isNotEmpty()) {
             Surface(
                 color = Color(0xFF23143D),
-                shape = RoundedCornerShape(16.dp),
-                shadowElevation = 10.dp,
+                shape = RoundedCornerShape(50),
+                shadowElevation = 8.dp,
+                border = BorderStroke(1.dp, Color(0xFF4A3075)),
                 modifier = Modifier
-                    .fillMaxWidth()
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 12.dp)
+                    .padding(bottom = 20.dp)
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${selectedPhotoIds.size} Foto Terpilih",
+                        text = "${selectedPhotoIds.size} Terpilih",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
+                        fontSize = 12.sp
                     )
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = { selectedPhotoIds = emptySet() }) {
-                            Text("Batal", color = TextSecondary, fontSize = 13.sp)
-                        }
+                    val rawWaMulti = session.whatsappNumber?.replace("+", "")?.replace(" ", "")?.replace("-", "") ?: ""
+                    val waNumberMulti = if (rawWaMulti.startsWith("0")) "62" + rawWaMulti.substring(1) else rawWaMulti
+                    val dayDateFormatted = formatFormattedDayDate(session.sessionDate)
+                    val currentSubfolder = folderStack.lastOrNull()?.name ?: ""
 
-                        Button(
-                            onClick = {
-                                if (isGuest) {
-                                    Toast.makeText(context, "Harap login Google terlebih dahulu untuk mengunduh foto!", Toast.LENGTH_LONG).show()
-                                    onRequireLogin()
-                                } else {
+                    Surface(
+                        color = Color(0xFF25D366),
+                        shape = RoundedCornerShape(50),
+                        modifier = Modifier.clickable {
+                            if (waNumberMulti.isNotBlank()) {
+                                try {
                                     val selectedItems = photos.filter { selectedPhotoIds.contains(it.id) }
-                                    selectedItems.forEach { item ->
-                                        CariFotoDownloader.downloadPhoto(context, item.id, item.name)
+                                    val fileList = selectedItems.mapIndexed { idx, item -> "${idx + 1}. *${item.name}*" }.joinToString("\n")
+                                    val rawIg = session.instagramLink?.trim()?.removePrefix("@") ?: ""
+                                    val messageText = buildString {
+                                        append("Halo kak ${if (rawIg.isNotBlank()) "@$rawIg" else ""}! 💬\n\n")
+                                        append("Saya mau pesan/beli foto jepretan di:\n")
+                                        append("📍 Lokasi: *${session.location}*\n")
+                                        if (dayDateFormatted.isNotBlank()) append("📅 Hari & Tanggal: *$dayDateFormatted*\n")
+                                        if (currentSubfolder.isNotBlank()) append("⏰ Jam EXIF: *$currentSubfolder*\n")
+                                        append("\n📄 Daftar Foto (${selectedItems.size} foto):\n")
+                                        append(fileList)
                                     }
-                                    selectedPhotoIds = emptySet()
+                                    val message = Uri.encode(messageText)
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$waNumberMulti?text=$message"))
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Gagal membuka WhatsApp Fotografer", Toast.LENGTH_SHORT).show()
                                 }
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = PurplePrimary)
-                        ) {
-                            Text("Unduh (${selectedPhotoIds.size}) ⬇️", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White)
+                            } else {
+                                Toast.makeText(context, "Nomor WA Fotografer belum terdaftar", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    ) {
+                        Text(
+                            text = "💬 WA (${selectedPhotoIds.size})",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
+
+                    Surface(
+                        color = PurplePrimary,
+                        shape = RoundedCornerShape(50),
+                        modifier = Modifier.clickable {
+                            if (isGuest) {
+                                Toast.makeText(context, "Harap login Google terlebih dahulu untuk mengunduh foto!", Toast.LENGTH_LONG).show()
+                                onRequireLogin()
+                            } else {
+                                val selectedItems = photos.filter { selectedPhotoIds.contains(it.id) }
+                                selectedItems.forEach { item ->
+                                    CariFotoDownloader.downloadPhoto(context, item.id, item.name)
+                                }
+                                selectedPhotoIds = emptySet()
+                            }
+                        }
+                    ) {
+                        Text(
+                            text = "⬇️ HD (${selectedPhotoIds.size})",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
+
+                    Surface(
+                        color = Color(0xFF302A3A),
+                        shape = CircleShape,
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clickable { selectedPhotoIds = emptySet() }
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text("✕", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -701,6 +777,7 @@ private fun SessionGallery(
         selectedPhotoForViewer?.let { photo ->
             FullScreenPhotoViewerDialog(
                 photo = photo,
+                session = session,
                 isGuest = isGuest,
                 onRequireLogin = onRequireLogin,
                 onDismiss = { selectedPhotoForViewer = null }
@@ -713,6 +790,7 @@ private fun SessionGallery(
 @Composable
 private fun FullScreenPhotoViewerDialog(
     photo: DrivePhotoItem,
+    session: CariFotoSessionDto,
     isGuest: Boolean,
     onRequireLogin: () -> Unit,
     onDismiss: () -> Unit
@@ -762,7 +840,7 @@ private fun FullScreenPhotoViewerDialog(
                 }
             }
 
-            // Bottom Bar: Tombol Unduh Foto HD
+            // Bottom Bar: Tombol Unduh Foto HD & Pesan WA Direct
             Surface(
                 color = Color.Black.copy(alpha = 0.8f),
                 shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
@@ -779,23 +857,64 @@ private fun FullScreenPhotoViewerDialog(
                     Text("Format Foto HD Asli dari Google Drive", color = TextSecondary, fontSize = 11.sp)
                     Spacer(Modifier.height(14.dp))
 
-                    Button(
-                        onClick = {
-                            if (isGuest) {
-                                onDismiss()
-                                Toast.makeText(context, "Harap login Google terlebih dahulu untuk mengunduh foto!", Toast.LENGTH_LONG).show()
-                                onRequireLogin()
-                            } else {
-                                CariFotoDownloader.downloadPhoto(context, photo.id, photo.name)
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = PurplePrimary)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("Unduh Foto HD ⬇️", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
+                        // TOMBOL PESAN DIRECT KE WA FOTOGRAFER SESI INI
+                        val rawWa = session.whatsappNumber?.replace("+", "")?.replace(" ", "")?.replace("-", "") ?: ""
+                        val waNumber = if (rawWa.startsWith("0")) "62" + rawWa.substring(1) else rawWa
+                        val dayDateFormatted = formatFormattedDayDate(session.sessionDate)
+
+                        Button(
+                            onClick = {
+                                if (waNumber.isNotBlank()) {
+                                    try {
+                                        val rawIg = session.instagramLink?.trim()?.removePrefix("@") ?: ""
+                                        val messageText = buildString {
+                                            append("Halo kak ${if (rawIg.isNotBlank()) "@$rawIg" else ""}! 💬\n\n")
+                                            append("Saya mau pesan/beli foto jepretan di:\n")
+                                            append("📍 Lokasi: *${session.location}*\n")
+                                            if (dayDateFormatted.isNotBlank()) append("📅 Hari & Tanggal: *$dayDateFormatted*\n")
+                                            append("• File Foto: *${photo.name}*")
+                                        }
+                                        val textMessage = Uri.encode(messageText)
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$waNumber?text=$textMessage"))
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Gagal membuka WhatsApp Fotografer", Toast.LENGTH_SHORT).show()
+                                    }
+                                } else {
+                                    Toast.makeText(context, "Nomor WA Fotografer belum terdaftar", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366))
+                        ) {
+                            Text("💬 Pesan WA", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White)
+                        }
+
+                        Button(
+                            onClick = {
+                                if (isGuest) {
+                                    onDismiss()
+                                    Toast.makeText(context, "Harap login Google terlebih dahulu untuk mengunduh foto!", Toast.LENGTH_LONG).show()
+                                    onRequireLogin()
+                                } else {
+                                    CariFotoDownloader.downloadPhoto(context, photo.id, photo.name)
+                                }
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = PurplePrimary)
+                        ) {
+                            Text("Unduh HD ⬇️", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White)
+                        }
                     }
                 }
             }
@@ -908,12 +1027,17 @@ private fun PhotoPreviewCard(
                     color = Color(0xFF22C55E),
                     shape = CircleShape,
                     modifier = Modifier
-                        .size(24.dp)
+                        .padding(6.dp)
+                        .size(20.dp)
                         .align(Alignment.TopEnd)
-                        .padding(4.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Text("✓", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = "Selected",
+                            tint = Color.White,
+                            modifier = Modifier.size(13.dp)
+                        )
                     }
                 }
             }

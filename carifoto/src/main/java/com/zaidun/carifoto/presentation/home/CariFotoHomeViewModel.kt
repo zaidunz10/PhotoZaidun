@@ -166,16 +166,24 @@ class CariFotoHomeViewModel : ViewModel() {
             }
     }
 
+    private fun extractPhotoNumber(name: String): Long {
+        val numbers = Regex("\\d+").findAll(name).map { it.value }.joinToString("")
+        return numbers.toLongOrNull() ?: Long.MAX_VALUE
+    }
+
     // Mengambil folder dan foto pada satu tingkat folder saja.
     private suspend fun loadDriveFolderContents(folderId: String) {
         val folders = driveRepository.getFolders(folderId)
         val photos = driveRepository.getPhotos(folderId)
 
+        // Urutkan foto dari nomor file TERKECIL ke TERBESAR secara alami (IMG_0001 -> IMG_0002)
+        val sortedPhotos = photos.sortedBy { extractPhotoNumber(it.name) }
+
         _uiState.update {
             it.copy(
                 driveFolders = folders,
-                drivePhotos = photos,
-                filteredDrivePhotos = photos
+                drivePhotos = sortedPhotos,
+                filteredDrivePhotos = sortedPhotos
             )
         }
 

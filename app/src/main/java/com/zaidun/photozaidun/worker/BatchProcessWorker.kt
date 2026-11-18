@@ -203,65 +203,117 @@ class BatchProcessWorker @AssistedInject constructor(
             coroutineScope {
                 groupedByHour.forEach { (hourFolder, hourFiles) ->
                     if (isStopped) return@coroutineScope
-                    val currentOutputFolder = outputBaseFolder.findFile(hourFolder)
+                    val hourOutputFolder = outputBaseFolder.findFile(hourFolder)
                         ?: outputBaseFolder.createDirectory(hourFolder)
-                    val existingFiles = HashSet<String>()
-
-                    currentOutputFolder
-                        ?.listFiles()
-                        ?.forEach {
-                            it.name?.let(existingFiles::add)
-                        }
 
                     Timber.tag("EXPORT").d("Memproses Jam $hourFolder: ${hourFiles.size} foto")
-                    
-                    // Streaming Upload: Pemrosesan dibagi per-batch 500 foto
-                    val batches = hourFiles.chunked(500)
-                    batches.forEachIndexed { batchIndex, batchFiles ->
-                        if (isStopped) return@coroutineScope
 
-                        batchFiles.forEach { file ->
+                    if (wmShowPart) {
+                        // Jika Part Folder diaktifkan: Bagi foto per maxPhotos (default 100) ke folder part 1, part 2...
+                        val partChunks = hourFiles.chunked(maxPhotos.coerceAtLeast(10))
+                        partChunks.forEachIndexed { partIdx, partFiles ->
                             if (isStopped) return@coroutineScope
-                            
-                            val outputFileName: String
-                            val outputFile: DocumentFile?
 
-                            synchronized(outputFileLock) {
-                                val generatedName = generateNewName(file.name, suffix)
-                                if (generatedName in existingFiles) {
-                                    completed.incrementAndGet()
-                                    return@forEach
+                            val partNum = startFrom + partIdx
+                            val partFolderName = "part $partNum"
+                            val currentOutputFolder = hourOutputFolder?.findFile(partFolderName)
+                                ?: hourOutputFolder?.createDirectory(partFolderName)
+
+                            val existingFiles = HashSet<String>()
+                            currentOutputFolder?.listFiles()?.forEach { it.name?.let(existingFiles::add) }
+
+                            partFiles.forEach { file ->
+                                if (isStopped) return@coroutineScope
+
+                                val outputFileName: String
+                                val outputFile: DocumentFile?
+
+                                synchronized(outputFileLock) {
+                                    val generatedName = generateNewName(file.name, suffix)
+                                    if (generatedName in existingFiles) {
+                                        completed.incrementAndGet()
+                                        return@forEach
+                                    }
+
+                                    existingFiles.add(generatedName)
+                                    outputFile = currentOutputFolder?.createFile(file.mime, generatedName)
+                                    outputFileName = generatedName
                                 }
 
-                                existingFiles.add(generatedName)
-                                outputFile = currentOutputFolder?.createFile(file.mime, generatedName)
-                                outputFileName = generatedName
-                            }
+                                outputFile?.uri?.let { outUri ->
+                                    applicationContext.contentResolver.openOutputStream(outUri)?.use { outStream ->
+                                        processor.process(
+                                            inputUri = file.uri,
+                                            watermarkConfig = watermarkConfig,
+                                            resizeConfig = ResizeConfig(percentage = resize),
+                                            fileName = outputFileName,
+                                            partName = "$hourFolder / $partFolderName",
+                                            compressionConfig = CompressionConfig(quality = quality),
+                                            outputStream = outStream,
+                                            showTimestamp = wmShowTimestamp
+                                        )
 
-                            outputFile?.uri?.let { outUri ->
-                                applicationContext.contentResolver.openOutputStream(outUri)?.use { outStream ->
-                                    processor.process(
-                                        inputUri = file.uri,
-                                        watermarkConfig = watermarkConfig,
-                                        resizeConfig = ResizeConfig(percentage = resize),
-                                        fileName = outputFileName,
-                                        partName = hourFolder,
-                                        compressionConfig = CompressionConfig(quality = quality),
-                                        outputStream = outStream,
-                                        showTimestamp = wmShowTimestamp
-                                    )
-                                    
-                                    val done = completed.incrementAndGet()
-                                    if (done % 5 == 0 || done == imageFiles.size) {
-                                        updateExportProgress(done, imageFiles.size, file.name ?: "")
+                                        val done = completed.incrementAndGet()
+                                        if (done % 5 == 0 || done == imageFiles.size) {
+                                            updateExportProgress(done, imageFiles.size, file.name ?: "")
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        // Sesaat setelah 500 foto selesai diekspor di HP,
-                        // LANGSUNG picu upload Google Drive untuk 500 foto tersebut tanpa menunggu batch lainnya!
-                        currentOutputFolder?.let { enqueueUpload(it, batchFiles.size) }
+                            // Langsung picu upload Google Drive per-part folder begitu part ini selesai!
+                            currentOutputFolder?.let { enqueueUpload(it, partFiles.size) }
+                        }
+                    } else {
+                        // Jika Part Folder mati: Masukkan semua foto langsung di dalam folder jam
+                        val existingFiles = HashSet<String>()
+                        hourOutputFolder?.listFiles()?.forEach { it.name?.let(existingFiles::add) }
+
+                        val batches = hourFiles.chunked(500)
+                        batches.forEachIndexed { batchIndex, batchFiles ->
+                            if (isStopped) return@coroutineScope
+
+                            batchFiles.forEach { file ->
+                                if (isStopped) return@coroutineScope
+
+                                val outputFileName: String
+                                val outputFile: DocumentFile?
+
+                                synchronized(outputFileLock) {
+                                    val generatedName = generateNewName(file.name, suffix)
+                                    if (generatedName in existingFiles) {
+                                        completed.incrementAndGet()
+                                        return@forEach
+                                    }
+
+                                    existingFiles.add(generatedName)
+                                    outputFile = hourOutputFolder?.createFile(file.mime, generatedName)
+                                    outputFileName = generatedName
+                                }
+
+                                outputFile?.uri?.let { outUri ->
+                                    applicationContext.contentResolver.openOutputStream(outUri)?.use { outStream ->
+                                        processor.process(
+                                            inputUri = file.uri,
+                                            watermarkConfig = watermarkConfig,
+                                            resizeConfig = ResizeConfig(percentage = resize),
+                                            fileName = outputFileName,
+                                            partName = hourFolder,
+                                            compressionConfig = CompressionConfig(quality = quality),
+                                            outputStream = outStream,
+                                            showTimestamp = wmShowTimestamp
+                                        )
+
+                                        val done = completed.incrementAndGet()
+                                        if (done % 5 == 0 || done == imageFiles.size) {
+                                            updateExportProgress(done, imageFiles.size, file.name ?: "")
+                                        }
+                                    }
+                                }
+                            }
+
+                            hourOutputFolder?.let { enqueueUpload(it, batchFiles.size) }
+                        }
                     }
                 }
             }

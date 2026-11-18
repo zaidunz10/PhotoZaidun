@@ -12,8 +12,8 @@ data class SettingsUiState(
     val bankName: String = "BCA",
     val accountNumber: String = "",
     val accountHolderName: String = "",
-    val defaultPhotoPrice: Int = 10000,
-    val minQtyDiscount: Int = 3,
+    val defaultPhotoPrice: Int = 0,
+    val minQtyDiscount: Int = 0,
     val priceDiscount: Int? = null,
 
     val rootFolder: String = "Photo Zaidun",
@@ -27,6 +27,7 @@ data class SettingsUiState(
     val maxPhotoPerFolder: String = "200",
 
     val showFilename: Boolean = false,
+    val showPart: Boolean = true,
     val autoUpload: Boolean = false
 
 )

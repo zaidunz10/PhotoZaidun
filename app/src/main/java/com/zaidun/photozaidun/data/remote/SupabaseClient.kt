@@ -43,10 +43,14 @@ data class SessionUpdateDriveDto(
     @SerialName("is_published") val isPublished: Boolean = true
 )
 
-// DTO untuk Mengambil Daftar Lokasi Unik dari Tabel `sessions`
+// DTO untuk Mengambil Daftar Lokasi & Sesi Fotografer dari Tabel `sessions`
 @Serializable
 data class SessionLocationDto(
-    val location: String
+    val id: Long = 0,
+    val location: String = "",
+    @SerialName("session_date") val sessionDate: String? = null,
+    @SerialName("drive_folder_id") val driveFolderId: String? = null,
+    @SerialName("is_published") val isPublished: Boolean? = true
 )
 
 object SupabaseHelper {

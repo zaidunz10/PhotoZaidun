@@ -113,7 +113,8 @@ class SettingsViewModel @Inject constructor(
                 preferences.accountHolderName,
                 preferences.defaultPhotoPrice,
                 preferences.minQtyDiscount,
-                preferences.priceDiscount
+                preferences.priceDiscount,
+                preferences.showPart
             ) { args: Array<Any?> ->
                 val id = args[0] as String
                 val name = args[1] as String
@@ -136,6 +137,7 @@ class SettingsViewModel @Inject constructor(
                 val price = args[18] as Int
                 val minQty = args[19] as Int
                 val discountPrice = args[20] as Int?
+                val showPartVal = args[21] as Boolean
 
                 val user = if (id.isNotEmpty()) GoogleUser(id, name, email, photoUrl.ifBlank { null }) else null
 
@@ -154,6 +156,7 @@ class SettingsViewModel @Inject constructor(
                         defaultPhotoPrice = price,
                         minQtyDiscount = minQty,
                         priceDiscount = discountPrice,
+                        showPart = showPartVal,
                         driveConnected = token.isNotBlank(),
                         rootFolder = root,
                         folderLevels = folderLevels.filterIsInstance<FolderLevel>(),
@@ -171,8 +174,8 @@ class SettingsViewModel @Inject constructor(
 
     fun loginGoogle(
         activity: Activity,
-        onNeedConsent: (IntentSender) -> Unit,
-        onError: (Exception) -> Unit
+        onNeedConsent: (IntentSender) -> Unit = {},
+        onError: (Exception) -> Unit = {}
     ) {
         viewModelScope.launch {
             try {
@@ -227,10 +230,26 @@ class SettingsViewModel @Inject constructor(
     }
 
 
+    fun resetLocalAccountOnly() {
+        viewModelScope.launch {
+            preferences.clearUser()
+            preferences.saveDriveAccessToken("")
+            _uiState.update { it.copy(googleUser = null, driveConnected = false) }
+        }
+    }
+
     // Fungsi Save Responsif (Update UI Langsung + Simpan DB)
     fun saveRootFolder(v: String) { _uiState.update { it.copy(rootFolder = v) }; viewModelScope.launch { preferences.saveRootFolder(v) } }
     fun savePartFolder(v: String) { _uiState.update { it.copy(partFolder = v) }; viewModelScope.launch { preferences.savePartFolder(v) } }
     fun saveFileSuffix(v: String) { _uiState.update { it.copy(fileSuffix = v) }; viewModelScope.launch { preferences.saveFileSuffix(v) } }
+    fun saveShowPart(v: Boolean) {
+        _uiState.update { it.copy(showPart = v) }
+        viewModelScope.launch { preferences.saveShowPart(v) }
+    }
+    fun saveStartPartNumber(v: Int) {
+        _uiState.update { it.copy(startPartNumber = v) }
+        viewModelScope.launch { preferences.saveStartPartNumber(v) }
+    }
     fun saveStartPart(v: Int) {
         _uiState.update { it.copy(startPartNumber = v) }
         viewModelScope.launch { preferences.saveStartPartNumber(v) }

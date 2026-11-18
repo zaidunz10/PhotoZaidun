@@ -39,6 +39,11 @@ android {
             "SUPABASE_ANON_KEY",
             "\"${localProperties.getProperty("SUPABASE_PUBLISHABLE_KEY") ?: ""}\""
         )
+        buildConfigField(
+            "String",
+            "WEB_CARIFOTO",
+            "\"${localProperties.getProperty("WEB_CARIFOTO") ?: "https://cari-foto.vercel.app/"}\""
+        )
 
 
         applicationId = "com.zaidun.photozaidun"
@@ -47,9 +52,9 @@ android {
 
         targetSdk = 36
 
-        versionCode = 7
+        versionCode = 9
 
-        versionName = "1.0.6"
+        versionName = "1.0.8"
 
         testInstrumentationRunner =
             "androidx.test.runner.AndroidJUnitRunner"

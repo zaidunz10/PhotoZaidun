@@ -354,7 +354,7 @@ class HomeViewModel @Inject constructor(
     fun prepareExport(
         accessToken: String
     ) {
-        startBatchProcess(accessToken, -1L, true) // Default tanpa Session ID jika langsung dari UI
+        startBatchProcess(accessToken, true) // Default tanpa Session ID jika langsung dari UI
     }
 
     fun refreshTokenForUpload(
@@ -470,66 +470,10 @@ class HomeViewModel @Inject constructor(
     
     fun confirmLocationAndExport(location: String, accessToken: String) {
         dismissLocationDialog()
-        
-        // Simpan/Reuse sesi ke Supabase dan dapatkan ID Sesi (BIGINT)
-        viewModelScope.launch {
-            try {
-                val userId = _uiState.value.userId
-                val todayDateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-
-                // 1. Cek dulu apakah sesi untuk fotografer, lokasi, DAN tanggal hari ini sudah ada di Supabase
-                val existingSessions = SupabaseHelper.client.postgrest["sessions"]
-                    .select {
-                        filter {
-                            eq("photographer_id", userId)
-                            eq("location", location)
-                            eq("session_date", todayDateStr)
-                        }
-                    }.decodeList<SessionResponseDto>()
-
-                val existingId = existingSessions.lastOrNull()?.id
-
-                val targetSessionId = if (existingId != null && existingId > 0L) {
-                    Timber.d("Supabase: Menggunakan kembali Sesi Hari Ini ($todayDateStr) dengan ID: $existingId")
-                    existingId
-                } else {
-                    val priceSingleVal = preferences.defaultPhotoPrice.first().takeIf { it > 0 } ?: 10000
-                    val minQtyVal = preferences.minQtyDiscount.first()
-                    val discountPriceVal = preferences.priceDiscount.first()
-
-                    val sessionDto = SessionInsertDto(
-                        photographerId = userId,
-                        location = location,
-                        sessionDate = todayDateStr,
-                        whatsappNumber = _uiState.value.photographerWa,
-                        instagramLink = _uiState.value.photographerIg,
-                        priceSingle = priceSingleVal,
-                        minQtyDiscount = minQtyVal,
-                        priceDiscount = discountPriceVal,
-                        isPublished = _uiState.value.isPublishedForRider
-                    )
-
-                    val response = SupabaseHelper.client.postgrest["sessions"]
-                        .insert(sessionDto) {
-                            select()
-                        }.decodeSingle<SessionResponseDto>()
-
-                    Timber.d("Supabase: Sesi Fotografer baru hari ini ($todayDateStr) berhasil disimpan dengan ID: ${response.id}")
-                    response.id
-                }
-                
-                // Teruskan ID Sesi & Lokasi ke worker agar nanti bisa di-update dengan link Google Drive
-                startBatchProcess(accessToken, targetSessionId, _uiState.value.isPublishedForRider, location)
-            } catch (e: Exception) {
-                Timber.e(e, "Supabase: Gagal menyimpan/mengecek sesi fotografer")
-                // Fallback (jika misal gagal konek Supabase, tetap lanjutkan export tapi tanpa sessionId)
-                startBatchProcess(accessToken, -1L, _uiState.value.isPublishedForRider, location)
-            }
-        }
+        startBatchProcess(accessToken, _uiState.value.isPublishedForRider, location.trim())
     }
 
-    private fun startBatchProcess(accessToken: String, sessionId: Long, isPublished: Boolean, location: String = "") {
-        // PERBAIKAN INDENTASI & GUARD
+    private fun startBatchProcess(accessToken: String, isPublished: Boolean, location: String = "") {
         if (_uiState.value.isProcessing) {
             Timber.tag("EXPORT").d("Proses sedang berjalan, mengabaikan klik ganda.")
             return
@@ -544,7 +488,6 @@ class HomeViewModel @Inject constructor(
                 workDataOf(
                     "input_folder" to _uiState.value.selectedFolder, 
                     KEY_ACCESS_TOKEN to accessToken,
-                    "session_id" to sessionId,
                     "is_published" to isPublished,
                     "location" to location
                 )

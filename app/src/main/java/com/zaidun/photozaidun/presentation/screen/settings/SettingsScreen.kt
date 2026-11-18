@@ -60,6 +60,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -147,79 +148,80 @@ fun SettingsScreen(
                 } else {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp),
+                        shape = RoundedCornerShape(14.dp),
                         colors = CardDefaults.cardColors(containerColor = Color.White),
                         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(androidx.compose.foundation.shape.CircleShape)
-                                    .background(AccentPurple.copy(alpha = 0.15f)),
-                                contentAlignment = Alignment.Center
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                val initial = uiState.googleUser?.name?.trim()?.firstOrNull()?.uppercase() ?: "?"
-                                Text(initial, fontWeight = FontWeight.Bold, color = DeepPurple)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(34.dp)
+                                            .clip(CircleShape)
+                                            .background(AccentPurple.copy(alpha = 0.15f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        val initial = uiState.googleUser?.name?.trim()?.firstOrNull()?.uppercase() ?: "?"
+                                        Text(initial, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = DeepPurple)
+                                    }
+
+                                    Spacer(Modifier.width(10.dp))
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            uiState.googleUser?.name ?: "Guest",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = TitleDark,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            uiState.googleUser?.email ?: "Belum Login",
+                                            fontSize = 11.sp,
+                                            color = LabelGray,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+
+                                Spacer(Modifier.width(8.dp))
+
+                                TextButton(
+                                    onClick = { viewModel.resetLocalAccountOnly() },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text("Logout", color = Color.Red.copy(alpha = 0.8f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
 
-                            Spacer(Modifier.width(10.dp))
+                            Spacer(Modifier.height(8.dp))
 
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    uiState.googleUser?.name ?: "User",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = TitleDark
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(if (uiState.driveConnected) ConnectedGreen else Color.Gray)
                                 )
+                                Spacer(Modifier.width(6.dp))
                                 Text(
-                                    uiState.googleUser?.email ?: "",
+                                    if (uiState.driveConnected) "Terhubung dengan Google Drive" else "Belum terhubung dengan Drive",
                                     fontSize = 11.sp,
-                                    color = LabelGray
+                                    color = SubtleGray,
+                                    maxLines = 1
                                 )
-                            }
-
-                            Surface(
-                                color = ConnectedGreen.copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(50)
-                            ) {
-                                Text(
-                                    "Connected",
-                                    color = ConnectedGreen,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                )
-                            }
-
-                            Spacer(Modifier.width(6.dp))
-
-                            TextButton(onClick = { viewModel.logoutGoogle(context as Activity) }) {
-                                Text("Logout", color = Color.Gray, fontSize = 12.sp)
                             }
                         }
-                    }
-
-                    Spacer(Modifier.height(10.dp))
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(androidx.compose.foundation.shape.CircleShape)
-                                .background(if (uiState.driveConnected) ConnectedGreen else Color.Gray)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            if (uiState.driveConnected) "Terhubung dengan Drive" else "Belum terhubung dengan Drive",
-                            fontSize = 12.sp,
-                            color = SubtleGray
-                        )
                     }
                 }
             }
@@ -338,7 +340,65 @@ fun SettingsScreen(
                 )
             }
             item {
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(10.dp))
+                SectionLabel("Sub-Folder Part & Batas Foto")
+                Spacer(Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Gunakan Sub-Folder Part", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TitleDark)
+                        Text("Membagi foto per part folder (part 1, part 2...)", fontSize = 11.sp, color = SubtleGray)
+                    }
+                    Switch(
+                        checked = uiState.showPart,
+                        onCheckedChange = { viewModel.saveShowPart(it) },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = AccentPurple)
+                    )
+                }
+
+                if (uiState.showPart) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = uiState.maxPhotoPerFolder,
+                            onValueChange = {
+                                val v = it.filter(Char::isDigit)
+                                if (v.length <= 4) viewModel.saveMaxPhoto(v)
+                            },
+                            label = { Text("Foto per Part", fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = AccentPurple)
+                        )
+
+                        OutlinedTextField(
+                            value = uiState.startPartNumber.toString(),
+                            onValueChange = {
+                                val v = it.filter(Char::isDigit).toIntOrNull() ?: 1
+                                viewModel.saveStartPartNumber(v)
+                            },
+                            label = { Text("Mulai dari Part #", fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = AccentPurple)
+                        )
+                    }
+                }
+            }
+
+            item {
+                Spacer(Modifier.height(14.dp))
                 SectionLabel("Resolusi Export: ${uiState.resizePercent}%")
                 Spacer(Modifier.height(12.dp))
 

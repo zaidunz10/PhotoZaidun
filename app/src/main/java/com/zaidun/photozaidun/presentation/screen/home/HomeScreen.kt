@@ -457,10 +457,10 @@ fun HomeScreen(
                         Spacer(Modifier.height(18.dp))
 
                         val storage = uiState.driveStorage
-                        val usedStr = storage?.usedBytes?.toReadableSize() ?: "12,4 GB"
+                        val usedStr = storage?.usedBytes?.toReadableSize() ?: "0"
                         val totalStr = when {
-                            storage == null -> "5 TB"
-                            storage.totalBytes <= 0L -> "5 TB (Workspace)"
+                            storage == null -> "0 GB"
+                            storage.totalBytes <= 0L -> "0 GB"
                             else -> storage.totalBytes.toReadableSize()
                         }
                         val freeStr = if (storage != null && storage.totalBytes > 0L) storage.freeBytes.toReadableSize() else "Sangat Luas"

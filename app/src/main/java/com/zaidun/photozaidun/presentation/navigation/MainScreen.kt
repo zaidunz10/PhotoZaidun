@@ -1,44 +1,47 @@
 package com.zaidun.photozaidun.presentation.navigation
 
+import android.app.Activity
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Brush
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.zaidun.photozaidun.presentation.screen.dashboard.DashboardScreen
+import com.zaidun.photozaidun.presentation.screen.dashboard.DashboardViewModel
 import com.zaidun.photozaidun.presentation.screen.home.HomeScreen
 import com.zaidun.photozaidun.presentation.screen.home.HomeViewModel
+import com.zaidun.photozaidun.presentation.screen.profile.ProfileScreen
 import com.zaidun.photozaidun.presentation.screen.settings.SettingsScreen
+import com.zaidun.photozaidun.presentation.screen.settings.SettingsViewModel
 import com.zaidun.photozaidun.presentation.screen.watermarksettings.WatermarkSettingsScreen
 import com.zaidun.photozaidun.presentation.shared.SharedFolderViewModel
-
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.core.tween
 import com.zaidun.photozaidun.presentation.theme.motion.MotionTokens
-
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.hilt.navigation.compose.hiltViewModel
-import com.zaidun.photozaidun.presentation.screen.profile.ProfileScreen
-import androidx.compose.runtime.collectAsState
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import com.zaidun.photozaidun.presentation.screen.settings.SettingsViewModel
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -52,8 +55,10 @@ fun MainScreen(
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
     val navController = rememberNavController()
+    val context = LocalContext.current
     val items = listOf(
         Screen.Home,
+        Screen.History,
         Screen.Watermark,
         Screen.Profile
     )
@@ -66,18 +71,27 @@ fun MainScreen(
                 shadowElevation = 8.dp
             ) {
                 NavigationBar(
-                    containerColor = androidx.compose.ui.graphics.Color(0xFF23143D)
+                    containerColor = Color(0xFF23143D)
                 ) {
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val currentDestination = navBackStackEntry?.destination
 
                     items.forEach { screen ->
                         val isSelected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
+                        val labelText = when (screen) {
+                            Screen.Home -> "Export"
+                            Screen.History -> "Dashboard"
+                            Screen.Watermark -> "Watermark"
+                            Screen.Profile -> "Profil"
+                            else -> "Settings"
+                        }
+
                         NavigationBarItem(
                             icon = {
                                 Icon(
                                     imageVector = when(screen) {
-                                        Screen.Home -> Icons.Default.Home
+                                        Screen.Home -> Icons.Default.FileUpload
+                                        Screen.History -> Icons.Default.Dashboard
                                         Screen.Watermark -> Icons.Default.Brush
                                         Screen.Profile -> Icons.Default.Person
                                         else -> Icons.Default.Settings
@@ -87,17 +101,17 @@ fun MainScreen(
                             },
                             label = { 
                                 Text(
-                                    screen.route.replaceFirstChar { it.uppercase() },
+                                    labelText,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                                 ) 
                             },
                             selected = isSelected,
                             colors = NavigationBarItemDefaults.colors(
-                                indicatorColor = androidx.compose.ui.graphics.Color(0xFF7B4FE0),
+                                indicatorColor = Color(0xFF7B4FE0),
                                 selectedIconColor = Color.White,
-                                unselectedIconColor = androidx.compose.ui.graphics.Color(0xFF9E8DBE),
+                                unselectedIconColor = Color(0xFF9E8DBE),
                                 selectedTextColor = Color.White,
-                                unselectedTextColor = androidx.compose.ui.graphics.Color(0xFF9E8DBE)
+                                unselectedTextColor = Color(0xFF9E8DBE)
                             ),
                             onClick = {
                                 navController.navigate(screen.route) {
@@ -148,6 +162,10 @@ fun MainScreen(
                     animatedVisibilityScope = this@composable
                 )
             }
+            composable(Screen.History.route) {
+                val dashboardViewModel: DashboardViewModel = hiltViewModel()
+                DashboardScreen(viewModel = dashboardViewModel)
+            }
             composable(Screen.Watermark.route) {
                 WatermarkSettingsScreen(onBack = { navController.popBackStack() })
             }
@@ -157,6 +175,16 @@ fun MainScreen(
                 ProfileScreen(
                     uiState = settingsUiState,
                     onBack = { navController.popBackStack() },
+                    onLoginGoogle = {
+                        (context as? Activity)?.let { act ->
+                            settingsViewModel.loginGoogle(act)
+                        }
+                    },
+                    onLogoutGoogle = {
+                        (context as? Activity)?.let { act ->
+                            settingsViewModel.logoutGoogle(act)
+                        }
+                    },
                     onSaveSuccess = { wa, ig, bank, accNum, holder, priceSingle, minQty, discountPrice ->
                         settingsViewModel.savePhotographerProfileAndBank(wa, ig, bank, accNum, holder, priceSingle, minQty, discountPrice)
                     }
@@ -165,7 +193,6 @@ fun MainScreen(
             composable(Screen.Settings.route) {
                 SettingsScreen(onBack = { navController.popBackStack() })
             }
-
         }
     }
 }
