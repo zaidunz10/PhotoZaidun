@@ -7,6 +7,8 @@ import com.google.api.services.drive.Drive
 import com.google.api.services.drive.model.File
 import com.google.api.services.drive.model.Permission
 import timber.log.Timber
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.net.URLConnection
 import java.io.File as JavaFile
 import javax.inject.Inject
@@ -14,9 +16,7 @@ import javax.inject.Inject
 class GoogleDriveRepository @Inject constructor() {
     suspend fun getStorageInfo(
         drive: Drive
-
-    ): DriveStorageInfo {
-
+    ): DriveStorageInfo = withContext(Dispatchers.IO) {
         val about = drive.about()
             .get()
             .setFields("user,storageQuota")
@@ -24,16 +24,11 @@ class GoogleDriveRepository @Inject constructor() {
 
         val quota = about.storageQuota
 
-        return DriveStorageInfo(
-
-            email = about.user.emailAddress,
-
-            totalBytes = quota.limit,
-
-            usedBytes = quota.usage
-
+        DriveStorageInfo(
+            email = about.user?.emailAddress ?: "",
+            totalBytes = quota?.limit ?: 0L,
+            usedBytes = quota?.usage ?: 0L
         )
-
     }
     fun getAllFileNames(
         drive: Drive,
@@ -166,7 +161,7 @@ class GoogleDriveRepository @Inject constructor() {
             .create(metadata)
             .setFields("id, webViewLink")
             .execute()
-            
+
         // Atur hak akses agar linknya bisa dibaca (Reader / Anyone with link)
         try {
             val permission = Permission()
@@ -176,7 +171,7 @@ class GoogleDriveRepository @Inject constructor() {
         } catch (e: Exception) {
             Timber.e(e, "Gagal mengatur permission folder Google Drive")
         }
-        
+
         return createdFile
     }
 
@@ -201,12 +196,12 @@ class GoogleDriveRepository @Inject constructor() {
         } else {
 
             Timber.d("Folder belum ada, membuat folder baru")
-            
+
             createFolder(drive, folderName, parentId).id
 
         }
     }
-    
+
     // Fungsi baru khusus untuk Part Folder yang akan dipakai oleh Rider
     fun getOrCreateFolderWithLink(
         drive: Drive,
@@ -303,7 +298,7 @@ class GoogleDriveRepository @Inject constructor() {
         return uploaded.id
     }
 
-    fun deleteFolder(drive: Drive, folderId: String) {
+   suspend fun deleteFolder(drive: Drive, folderId: String)= withContext (Dispatchers.IO) {
         try {
             drive.files().delete(folderId).execute()
             Timber.d("Google Drive: Folder ID $folderId berhasil dihapus!")

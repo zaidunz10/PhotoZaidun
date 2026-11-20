@@ -52,9 +52,10 @@ android {
 
         targetSdk = 36
 
-        versionCode = 9
+        versionCode = 14
 
-        versionName = "1.0.8"
+        versionName = "1.1.3" +
+                ""
 
         testInstrumentationRunner =
             "androidx.test.runner.AndroidJUnitRunner"
@@ -97,6 +98,7 @@ android {
         compose = true
 
         buildConfig = true
+        mlModelBinding = true
     }
 
     packaging {
@@ -205,6 +207,12 @@ dependencies {
     implementation(libs.supabase.postgrest)
     implementation(libs.ktor.client.android)
     implementation(libs.kotlinx.serialization.json)
+
+    // ML Kit & Palette API (On-Device AI Pre-Processing)
+    implementation("com.google.mlkit:object-detection:17.0.2")
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+    implementation("com.google.mlkit:image-labeling-custom:17.0.2")
+    implementation("androidx.palette:palette-ktx:1.0.0")
 
     testImplementation(libs.junit)
 

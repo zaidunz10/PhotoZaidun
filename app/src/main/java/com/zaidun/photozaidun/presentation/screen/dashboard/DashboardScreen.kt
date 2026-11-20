@@ -1,5 +1,6 @@
 package com.zaidun.photozaidun.presentation.screen.dashboard
 
+import android.app.Activity
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -95,10 +96,10 @@ fun DashboardScreen(
                 // Kartu Status Google Drive Storage (Super Ringkas & Anti Vertikal-Wrap)
                 item {
                     val storage = uiState.driveStorage
-                    val usedStr = storage?.usedBytes?.toReadableSize() ?: "12,4 GB"
+                    val usedStr = storage?.usedBytes?.toReadableSize() ?: "0 GB"
                     val totalStr = when {
-                        storage == null -> "5 TB"
-                        storage.totalBytes <= 0L -> "5 TB (Workspace)"
+                        storage == null -> "0 GB"
+                        storage.totalBytes <= 0L -> "0 GB (Workspace)"
                         else -> storage.totalBytes.toReadableSize()
                     }
                     val percentValue = if (storage != null && storage.totalBytes > 0L) (storage.percent * 100f) else 5.0f
@@ -386,6 +387,7 @@ fun DashboardScreen(
                                     val id = session.id
                                     isDeletingId = id
                                     viewModel.deleteSession(
+                                        activity = (context as? Activity),
                                         sessionId = id,
                                         driveFolderUrl = session.driveFolderId,
                                         deleteFromDrive = true

@@ -1,12 +1,15 @@
 package com.zaidun.photozaidun.presentation.screen.dashboard
 
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.zaidun.photozaidun.BuildConfig
+import com.zaidun.photozaidun.data.auth.GoogleAuthManager
 import com.zaidun.photozaidun.data.drive.DriveServiceFactory
 import com.zaidun.photozaidun.data.drive.GoogleDriveRepository
 import com.zaidun.photozaidun.data.local.datastore.UserPreferencesDataStore
@@ -26,6 +29,7 @@ import javax.inject.Inject
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val preferences: UserPreferencesDataStore,
+    private val googleAuthManager: GoogleAuthManager,
     private val driveRepository: GoogleDriveRepository,
     private val driveServiceFactory: DriveServiceFactory
 ) : ViewModel() {
@@ -72,19 +76,54 @@ class DashboardViewModel @Inject constructor(
                 }
 
                 // 2. Fetch Storage Info Google Drive jika Token Tersedia
-                val token = preferences.driveAccessToken.first()
+                var token = preferences.driveAccessToken.first()
+                if (token.isBlank()) {
+                    val freshToken = googleAuthManager.getFreshAccessToken()
+                    if (!freshToken.isNullOrBlank()) {
+                        token = freshToken
+                        preferences.saveDriveAccessToken(freshToken)
+                    }
+                }
+
                 if (token.isNotBlank()) {
                     try {
                         val driveService = driveServiceFactory.create(token)
                         val storageInfo = driveRepository.getStorageInfo(driveService)
                         _uiState.update { it.copy(driveStorage = storageInfo) }
                     } catch (e: Exception) {
-                        Timber.e(e, "Gagal memuat storage info Google Drive")
+                        val is401 = (e is GoogleJsonResponseException && e.statusCode == 401) ||
+                                e.message?.contains("401") == true ||
+                                e.cause is GoogleJsonResponseException
+
+                        if (is401) {
+                            Timber.w("Access Token Drive expired (401), mencoba refresh token secara otomatis...")
+                            val freshToken = googleAuthManager.getFreshAccessToken()
+                            if (!freshToken.isNullOrBlank()) {
+                                preferences.saveDriveAccessToken(freshToken)
+                                try {
+                                    val newDriveService = driveServiceFactory.create(freshToken)
+                                    val storageInfo = driveRepository.getStorageInfo(newDriveService)
+                                    _uiState.update { it.copy(driveStorage = storageInfo) }
+                                } catch (retryEx: Exception) {
+                                    Timber.e(retryEx, "Gagal memuat storage info Google Drive setelah refresh token")
+                                    _uiState.update { it.copy(driveStorage = null) }
+                                }
+                            } else {
+                                Timber.w("Refresh token gagal, menghapus token expired")
+                                preferences.saveDriveAccessToken("")
+                                _uiState.update { it.copy(driveStorage = null) }
+                            }
+                        } else {
+                            Timber.e(e, "Gagal memuat storage info Google Drive")
+                            _uiState.update { it.copy(driveStorage = null) }
+                        }
                     }
+                } else {
+                    _uiState.update { it.copy(driveStorage = null) }
                 }
 
             } catch (e: Exception) {
-                Timber.e(e, "Gagal memuat data Dashboard")
+                Timber.e(e, "Gagal memuat data dashboard")
             } finally {
                 _uiState.update { it.copy(isLoading = false) }
             }
@@ -110,12 +149,13 @@ class DashboardViewModel @Inject constructor(
     private fun extractDriveFolderId(urlOrId: String?): String? {
         if (urlOrId.isNullOrBlank()) return null
         if (urlOrId.contains("/folders/")) {
-            return urlOrId.split("/folders/")[1]?.split("?")?.get(0)?.split("/")?.get(0)
+            return urlOrId.split("/folders/")[1].split("?")[0].split("/")[0]
         }
         return urlOrId.takeIf { !it.contains("/") }
     }
 
     fun deleteSession(
+        activity: Activity? = null,
         sessionId: Long,
         driveFolderUrl: String? = null,
         deleteFromDrive: Boolean = false,
@@ -130,18 +170,62 @@ class DashboardViewModel @Inject constructor(
                     filter { eq("id", sessionId) }
                 }
 
-                // 2. Hapus folder dari Google Drive jika opsi deleteFromDrive diaktifkan
+                // 2. Hapus folder dari Google Drive jika opsi deleteFromDrive diaktifkan (dengan Auto-Refresh Token)
                 if (deleteFromDrive && !driveFolderUrl.isNullOrBlank()) {
-                    val token = preferences.driveAccessToken.first()
-                    if (token.isNotBlank()) {
-                        try {
-                            val driveService = driveServiceFactory.create(token)
-                            val folderId = extractDriveFolderId(driveFolderUrl)
-                            if (folderId != null) {
-                                driveRepository.deleteFolder(driveService, folderId)
+                    val folderId = extractDriveFolderId(driveFolderUrl)
+                    if (folderId != null) {
+                        if (activity != null) {
+                            googleAuthManager.refreshDriveAccessToken(
+                                context = activity,
+                                onTokenReady = { freshToken ->
+                                    viewModelScope.launch {
+                                        preferences.saveDriveAccessToken(freshToken)
+                                        try {
+                                            val driveService = driveServiceFactory.create(freshToken)
+                                            driveRepository.deleteFolder(driveService, folderId)
+                                            Timber.d("Google Drive: Folder ID $folderId terhapus dari Drive!")
+                                        } catch (e: Exception) {
+                                            Timber.e(e, "Gagal menghapus folder di Google Drive")
+                                        }
+                                    }
+                                },
+                                onNeedConsent = {},
+                                onError = { e -> Timber.e(e, "Gagal refresh token untuk delete Drive") }
+                            )
+                        } else {
+                            var token = preferences.driveAccessToken.first()
+                            if (token.isBlank()) {
+                                val freshToken = googleAuthManager.getFreshAccessToken()
+                                if (!freshToken.isNullOrBlank()) {
+                                    token = freshToken
+                                    preferences.saveDriveAccessToken(freshToken)
+                                }
                             }
-                        } catch (e: Exception) {
-                            Timber.e(e, "Gagal menghapus folder di Google Drive")
+                            if (token.isNotBlank()) {
+                                try {
+                                    val driveService = driveServiceFactory.create(token)
+                                    driveRepository.deleteFolder(driveService, folderId)
+                                } catch (e: Exception) {
+                                    val is401 = (e is GoogleJsonResponseException && e.statusCode == 401) ||
+                                            e.message?.contains("401") == true ||
+                                            e.cause is GoogleJsonResponseException
+
+                                    if (is401) {
+                                        val freshToken = googleAuthManager.getFreshAccessToken()
+                                        if (!freshToken.isNullOrBlank()) {
+                                            preferences.saveDriveAccessToken(freshToken)
+                                            try {
+                                                val driveService = driveServiceFactory.create(freshToken)
+                                                driveRepository.deleteFolder(driveService, folderId)
+                                            } catch (retryEx: Exception) {
+                                                Timber.e(retryEx, "Gagal menghapus folder di Google Drive setelah refresh token")
+                                            }
+                                        }
+                                    } else {
+                                        Timber.e(e, "Gagal menghapus folder di Google Drive")
+                                    }
+                                }
+                            }
                         }
                     }
                 }

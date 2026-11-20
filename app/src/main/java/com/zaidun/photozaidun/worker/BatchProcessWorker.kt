@@ -1,6 +1,5 @@
 package com.zaidun.photozaidun.worker
 
-// Automated edit test
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -18,21 +17,31 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
-import kotlinx.coroutines.sync.Semaphore
 import com.zaidun.photozaidun.data.local.datastore.UserPreferencesDataStore
-import com.zaidun.photozaidun.data.remote.UserLogger
 import com.zaidun.photozaidun.data.processor.bitmap.BitmapProcessor
+import com.zaidun.photozaidun.data.remote.UserLogger
 import com.zaidun.photozaidun.data.scanner.FastScanner
+import com.zaidun.photozaidun.data.scanner.ScanPhoto
 import com.zaidun.photozaidun.domain.model.*
 import com.zaidun.photozaidun.worker.DriveUploadWorker.Companion.KEY_ACCESS_TOKEN
 import com.zaidun.photozaidun.worker.DriveUploadWorker.Companion.KEY_FOLDER_URI
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import java.io.BufferedOutputStream
 import java.util.Calendar
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import timber.log.Timber
-import java.util.concurrent.atomic.AtomicInteger
+
 @HiltWorker
 class BatchProcessWorker @AssistedInject constructor(
     @Assisted context: Context,
@@ -40,6 +49,7 @@ class BatchProcessWorker @AssistedInject constructor(
     private val preferences: UserPreferencesDataStore,
 ) : CoroutineWorker(context, params) {
     private val outputFileLock = Any()
+
     override suspend fun doWork(): Result {
         Timber.tag("WORKER").d("Worker ID = $id")
         val workerStart = System.currentTimeMillis()
@@ -49,7 +59,7 @@ class BatchProcessWorker @AssistedInject constructor(
         }
         logStep("Worker Started")
 
-        val parallelism = (Runtime.getRuntime().availableProcessors()).coerceIn(12, 18)
+        val parallelism = (Runtime.getRuntime().availableProcessors()).coerceIn(2, 4)
         val semaphore = Semaphore(parallelism)
         try {
             setForeground(createForegroundInfo("Menyiapkan pemrosesan..."))
@@ -59,16 +69,17 @@ class BatchProcessWorker @AssistedInject constructor(
         logStep("Foreground Ready")
         val accessToken = inputData.getString(KEY_ACCESS_TOKEN) ?: return Result.failure()
         logStep("Access Token Ready")
-        suspend fun enqueueUpload(folder: DocumentFile, expectedCount: Int) {
+
+        suspend fun enqueueUpload(folder: DocumentFile, expectedCount: Int, hourFolder: String) {
             val freshToken = preferences.driveAccessToken.first()
             Timber.tag("DriveDebug").d(
-                "Enqueue Upload ${folder.name} count=$expectedCount token=${freshToken.takeLast(5)}"
+                "Enqueue Upload ${folder.name} hour=$hourFolder count=$expectedCount token=${freshToken.takeLast(5)}"
             )
             val tokenPreview =
                 if (freshToken.length > 5) freshToken.takeLast(5) else "EMPTY"
             Timber.tag("DriveDebug")
                 .d("Enqueue Upload ${folder.name} token=$tokenPreview")
-            val sessionId = inputData.getLong("session_id", -1L) // Ambil Session ID dari Input Data
+            val sessionId = inputData.getLong("session_id", -1L)
             val isPublished = inputData.getBoolean("is_published", true)
             val locationName = inputData.getString("location") ?: ""
             val request =
@@ -81,24 +92,27 @@ class BatchProcessWorker @AssistedInject constructor(
                             DriveUploadWorker.KEY_EXPECTED_COUNT to expectedCount,
                             "session_id" to sessionId,
                             "is_published" to isPublished,
-                            "location" to locationName
+                            "location" to locationName,
+                            DriveUploadWorker.KEY_HOUR_FOLDER to hourFolder
                         )
                     )
                     .build()
             WorkManager.getInstance(applicationContext)
                 .enqueueUniqueWork(
-                    "UPLOAD_${folder.name}",
-                    ExistingWorkPolicy.KEEP,
-                    request)
+                    "UPLOAD_${hourFolder}_${folder.name}",
+                    ExistingWorkPolicy.APPEND_OR_REPLACE,
+                    request
+                )
         }
+
         Timber.tag("EXPORT").d("BATCH WORKER START")
         val inputFolderUriStr = inputData.getString("input_folder") ?: return Result.failure()
         val inputFolder = DocumentFile.fromTreeUri(applicationContext, Uri.parse(inputFolderUriStr))
             ?: return Result.failure()
         logStep("Input Folder Ready")
+
         val wmShowTimestamp = preferences.showTimestamp.first()
-        val folderLevels =
-            preferences.folderLevels.first()
+        val folderLevels = preferences.folderLevels.first()
         val partPrefix = preferences.partFolder.first()
         val maxPhotos = preferences.maxPhotoPerFolder.first()
         val suffix = preferences.fileSuffix.first()
@@ -118,27 +132,33 @@ class BatchProcessWorker @AssistedInject constructor(
         val wmInfoSize = preferences.infoFontSize.first()
         val startFrom = preferences.startPartNumber.first()
         logStep("Preferences Loaded")
+
         var outputBaseFolder = inputFolder
 
         folderLevels
             .map { it.name.trim() }
             .filter { it.isNotBlank() }
             .forEach { folderName ->
-
                 outputBaseFolder =
                     outputBaseFolder.findFile(folderName)
                         ?: outputBaseFolder.createDirectory(folderName)
                                 ?: outputBaseFolder
-
             }
-        val processor = BitmapProcessor(applicationContext)
+
+        // Pool BitmapProcessor agar aman saat dijalankan paralel oleh semaphore
+        val processorPool = ConcurrentLinkedQueue<BitmapProcessor>()
+        val createdProcessors = ConcurrentLinkedQueue<BitmapProcessor>()
+        fun acquireProcessor(): BitmapProcessor {
+            return processorPool.poll() ?: BitmapProcessor(applicationContext).also {
+                createdProcessors.add(it)
+            }
+        }
+
         val completed = AtomicInteger(0)
         val watermarkConfig =
             if (wmUri.isNotBlank()) {
-
                 val logoUri = Uri.parse(wmUri)
                 val position = WatermarkPosition.valueOf(wmPos)
-
                 WatermarkConfig(
                     type = WatermarkType.IMAGE,
                     imageUri = logoUri,
@@ -153,9 +173,7 @@ class BatchProcessWorker @AssistedInject constructor(
                     infoOffsetY = wmInfoY,
                     infoSize = wmInfoSize
                 )
-
             } else {
-
                 WatermarkConfig(
                     type = WatermarkType.TEXT,
                     text = wmText,
@@ -165,6 +183,7 @@ class BatchProcessWorker @AssistedInject constructor(
                     showFilename = wmShowFilename
                 )
             }
+
         try {
             val listStart = System.currentTimeMillis()
             Timber.tag("PERF").d("Mulai membaca isi folder...")
@@ -187,18 +206,28 @@ class BatchProcessWorker @AssistedInject constructor(
             )
             logStep("Image List Loaded")
 
-            // Catat log export ke Firebase Firestore (Koleksi export_logs)
-            val email = preferences.userEmail.first()
-            val name = preferences.userName.first()
-            UserLogger.logExport(
-                email.ifBlank { "Guest" },
-                name.ifBlank { "Guest User" },
-                imageFiles.size
-            )
-
-            val groupedByHour = imageFiles.groupBy { file ->
-                getExifHourRange(file.uri)
+            // Catat log export ke Firebase Firestore secara asinkron (0 ms blocking)
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val email = preferences.userEmail.first()
+                    val name = preferences.userName.first()
+                    UserLogger.logExport(
+                        email.ifBlank { "Guest" },
+                        name.ifBlank { "Guest User" },
+                        imageFiles.size
+                    )
+                } catch (e: Exception) {
+                    Timber.w(e, "Gagal mencatat log Firestore")
+                }
             }
+
+            val groupedByHour = coroutineScope {
+                imageFiles.map { file ->
+                    async(Dispatchers.IO) {
+                        file to getExifHourRange(file)
+                    }
+                }.awaitAll()
+            }.groupBy({ it.second }, { it.first })
 
             coroutineScope {
                 groupedByHour.forEach { (hourFolder, hourFiles) ->
@@ -209,8 +238,8 @@ class BatchProcessWorker @AssistedInject constructor(
                     Timber.tag("EXPORT").d("Memproses Jam $hourFolder: ${hourFiles.size} foto")
 
                     if (wmShowPart) {
-                        // Jika Part Folder diaktifkan: Bagi foto per maxPhotos (default 100) ke folder part 1, part 2...
-                        val partChunks = hourFiles.chunked(maxPhotos.coerceAtLeast(10))
+                        // JALUR 1: PART AKTIF -> Bagi per maxPhotos, selesai Part 1 langsung upload Part 1, dst.
+                        val partChunks = hourFiles.chunked(maxPhotos.coerceAtLeast(1))
                         partChunks.forEachIndexed { partIdx, partFiles ->
                             if (isStopped) return@coroutineScope
 
@@ -220,99 +249,145 @@ class BatchProcessWorker @AssistedInject constructor(
                                 ?: hourOutputFolder?.createDirectory(partFolderName)
 
                             val existingFiles = HashSet<String>()
-                            currentOutputFolder?.listFiles()?.forEach { it.name?.let(existingFiles::add) }
+                            currentOutputFolder
+                                ?.listFiles()
+                                ?.forEach { it.name?.let(existingFiles::add) }
 
-                            partFiles.forEach { file ->
-                                if (isStopped) return@coroutineScope
+                            partFiles.map { file ->
+                                async(Dispatchers.IO) {
+                                    semaphore.withPermit {
+                                        if (isStopped) return@withPermit
 
-                                val outputFileName: String
-                                val outputFile: DocumentFile?
+                                        var alreadyExists = false
+                                        var outputFileName = ""
+                                        var outputFile: DocumentFile? = null
 
-                                synchronized(outputFileLock) {
-                                    val generatedName = generateNewName(file.name, suffix)
-                                    if (generatedName in existingFiles) {
-                                        completed.incrementAndGet()
-                                        return@forEach
-                                    }
+                                        synchronized(outputFileLock) {
+                                            val generatedName = generateNewName(file.name, suffix)
+                                            if (generatedName in existingFiles) {
+                                                alreadyExists = true
+                                            } else {
+                                                existingFiles.add(generatedName)
+                                                outputFile = currentOutputFolder?.createFile(file.mime, generatedName)
+                                                outputFileName = generatedName
+                                            }
+                                        }
 
-                                    existingFiles.add(generatedName)
-                                    outputFile = currentOutputFolder?.createFile(file.mime, generatedName)
-                                    outputFileName = generatedName
-                                }
+                                        if (alreadyExists) {
+                                            val done = completed.incrementAndGet()
+                                            if (done % 5 == 0 || done == imageFiles.size) {
+                                                updateExportProgress(done, imageFiles.size, file.name ?: "")
+                                            }
+                                            return@withPermit
+                                        }
 
-                                outputFile?.uri?.let { outUri ->
-                                    applicationContext.contentResolver.openOutputStream(outUri)?.use { outStream ->
-                                        processor.process(
-                                            inputUri = file.uri,
-                                            watermarkConfig = watermarkConfig,
-                                            resizeConfig = ResizeConfig(percentage = resize),
-                                            fileName = outputFileName,
-                                            partName = "$hourFolder / $partFolderName",
-                                            compressionConfig = CompressionConfig(quality = quality),
-                                            outputStream = outStream,
-                                            showTimestamp = wmShowTimestamp
-                                        )
+                                        val processor = acquireProcessor()
+                                        try {
+                                            outputFile?.uri?.let { outUri ->
+                                                applicationContext.contentResolver.openOutputStream(outUri)?.use { rawStream ->
+                                                    BufferedOutputStream(rawStream, 65536).use { outStream ->
+                                                        processor.process(
+                                                            inputUri = file.uri,
+                                                            watermarkConfig = watermarkConfig,
+                                                            resizeConfig = ResizeConfig(percentage = resize),
+                                                            fileName = outputFileName,
+                                                            partName = "$hourFolder / $partFolderName",
+                                                            compressionConfig = CompressionConfig(quality = quality),
+                                                            outputStream = outStream,
+                                                            showTimestamp = wmShowTimestamp
+                                                        )
+                                                    }
+                                                }
 
-                                        val done = completed.incrementAndGet()
-                                        if (done % 5 == 0 || done == imageFiles.size) {
-                                            updateExportProgress(done, imageFiles.size, file.name ?: "")
+                                                val done = completed.incrementAndGet()
+                                                if (done % 5 == 0 || done == imageFiles.size) {
+                                                    updateExportProgress(done, imageFiles.size, file.name ?: "")
+                                                }
+                                            }
+                                        } finally {
+                                            processorPool.offer(processor)
                                         }
                                     }
                                 }
-                            }
+                            }.awaitAll()
 
-                            // Langsung picu upload Google Drive per-part folder begitu part ini selesai!
-                            currentOutputFolder?.let { enqueueUpload(it, partFiles.size) }
+                            // Selesai 1 Part -> langsung picu upload untuk Part ini!
+                            currentOutputFolder?.let { enqueueUpload(it, partFiles.size, hourFolder) }
                         }
                     } else {
-                        // Jika Part Folder mati: Masukkan semua foto langsung di dalam folder jam
+                        // JALUR 2: PART MATI -> Pemrosesan dibagi per-batch 500 foto di dalam folder jam
                         val existingFiles = HashSet<String>()
-                        hourOutputFolder?.listFiles()?.forEach { it.name?.let(existingFiles::add) }
+                        hourOutputFolder
+                            ?.listFiles()
+                            ?.forEach { it.name?.let(existingFiles::add) }
 
                         val batches = hourFiles.chunked(500)
-                        batches.forEachIndexed { batchIndex, batchFiles ->
+                        var cumulativeCount = 0
+
+                        batches.forEach { batchFiles ->
                             if (isStopped) return@coroutineScope
 
-                            batchFiles.forEach { file ->
-                                if (isStopped) return@coroutineScope
+                            batchFiles.map { file ->
+                                async(Dispatchers.IO) {
+                                    semaphore.withPermit {
+                                        if (isStopped) return@withPermit
 
-                                val outputFileName: String
-                                val outputFile: DocumentFile?
+                                        var alreadyExists = false
+                                        var outputFileName = ""
+                                        var outputFile: DocumentFile? = null
 
-                                synchronized(outputFileLock) {
-                                    val generatedName = generateNewName(file.name, suffix)
-                                    if (generatedName in existingFiles) {
-                                        completed.incrementAndGet()
-                                        return@forEach
-                                    }
+                                        synchronized(outputFileLock) {
+                                            val generatedName = generateNewName(file.name, suffix)
+                                            if (generatedName in existingFiles) {
+                                                alreadyExists = true
+                                            } else {
+                                                existingFiles.add(generatedName)
+                                                outputFile = hourOutputFolder?.createFile(file.mime, generatedName)
+                                                outputFileName = generatedName
+                                            }
+                                        }
 
-                                    existingFiles.add(generatedName)
-                                    outputFile = hourOutputFolder?.createFile(file.mime, generatedName)
-                                    outputFileName = generatedName
-                                }
+                                        if (alreadyExists) {
+                                            val done = completed.incrementAndGet()
+                                            if (done % 5 == 0 || done == imageFiles.size) {
+                                                updateExportProgress(done, imageFiles.size, file.name ?: "")
+                                            }
+                                            return@withPermit
+                                        }
 
-                                outputFile?.uri?.let { outUri ->
-                                    applicationContext.contentResolver.openOutputStream(outUri)?.use { outStream ->
-                                        processor.process(
-                                            inputUri = file.uri,
-                                            watermarkConfig = watermarkConfig,
-                                            resizeConfig = ResizeConfig(percentage = resize),
-                                            fileName = outputFileName,
-                                            partName = hourFolder,
-                                            compressionConfig = CompressionConfig(quality = quality),
-                                            outputStream = outStream,
-                                            showTimestamp = wmShowTimestamp
-                                        )
+                                        val processor = acquireProcessor()
+                                        try {
+                                            outputFile?.uri?.let { outUri ->
+                                                applicationContext.contentResolver.openOutputStream(outUri)?.use { rawStream ->
+                                                    BufferedOutputStream(rawStream, 65536).use { outStream ->
+                                                        processor.process(
+                                                            inputUri = file.uri,
+                                                            watermarkConfig = watermarkConfig,
+                                                            resizeConfig = ResizeConfig(percentage = resize),
+                                                            fileName = outputFileName,
+                                                            partName = hourFolder,
+                                                            compressionConfig = CompressionConfig(quality = quality),
+                                                            outputStream = outStream,
+                                                            showTimestamp = wmShowTimestamp
+                                                        )
+                                                    }
+                                                }
 
-                                        val done = completed.incrementAndGet()
-                                        if (done % 5 == 0 || done == imageFiles.size) {
-                                            updateExportProgress(done, imageFiles.size, file.name ?: "")
+                                                val done = completed.incrementAndGet()
+                                                if (done % 5 == 0 || done == imageFiles.size) {
+                                                    updateExportProgress(done, imageFiles.size, file.name ?: "")
+                                                }
+                                            }
+                                        } finally {
+                                            processorPool.offer(processor)
                                         }
                                     }
                                 }
-                            }
+                            }.awaitAll()
 
-                            hourOutputFolder?.let { enqueueUpload(it, batchFiles.size) }
+                            cumulativeCount += batchFiles.size
+                            // Sesaat setelah 500 foto selesai diekspor di HP, langsung picu upload!
+                            hourOutputFolder?.let { enqueueUpload(it, cumulativeCount, hourFolder) }
                         }
                     }
                 }
@@ -322,16 +397,21 @@ class BatchProcessWorker @AssistedInject constructor(
             Timber.e(e, "Gagal dalam BatchProcessWorker")
             return Result.failure()
         } finally {
-            processor.clearCache()
+            createdProcessors.forEach {
+                try {
+                    it.clearCache()
+                } catch (_: Exception) {
+                }
+            }
         }
     }
 
-    private fun getExifHourRange(uri: Uri): String {
+    private fun getExifHourRange(photo: ScanPhoto): String {
         var hour: Int? = null
 
-        // 1. Coba baca dari metadata EXIF (TAG_DATETIME_ORIGINAL, TAG_DATETIME_DIGITIZED, TAG_DATETIME)
+        // 1. UTAMA (100% AKURAT): Baca Tanggal & Jam Asli Kamera dari EXIF Header JPEG!
         try {
-            applicationContext.contentResolver.openInputStream(uri)?.use { input ->
+            applicationContext.contentResolver.openInputStream(photo.uri)?.use { input ->
                 val exif = ExifInterface(input)
                 val dateStr = exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
                     ?: exif.getAttribute(ExifInterface.TAG_DATETIME_DIGITIZED)
@@ -351,22 +431,16 @@ class BatchProcessWorker @AssistedInject constructor(
             Timber.w(e, "Gagal membaca EXIF date")
         }
 
-        // 2. Jika EXIF tanggal tidak ditemukan, fallback ke Last Modified file / System time
+        // 2. FALLBACK JIKA FOTO TIDAK MEMILIKI DATETIME EXIF: Gunakan lastModified
         if (hour == null || hour !in 0..23) {
-            try {
-                val documentFile = DocumentFile.fromSingleUri(applicationContext, uri)
-                val lastModified = documentFile?.lastModified() ?: 0L
-                if (lastModified > 0L) {
-                    val cal = Calendar.getInstance()
-                    cal.timeInMillis = lastModified
-                    hour = cal.get(Calendar.HOUR_OF_DAY)
-                }
-            } catch (e: Exception) {
-                Timber.w(e, "Gagal membaca lastModified file")
+            if (photo.lastModified > 0L) {
+                val cal = Calendar.getInstance()
+                cal.timeInMillis = photo.lastModified
+                hour = cal.get(Calendar.HOUR_OF_DAY)
             }
         }
 
-        // 3. Jika masih null, gunakan jam sistem saat ini
+        // 3. FALLBACK TERAKHIR: Gunakan jam sistem saat ini
         if (hour == null || hour !in 0..23) {
             val cal = Calendar.getInstance()
             hour = cal.get(Calendar.HOUR_OF_DAY)
@@ -403,6 +477,7 @@ class BatchProcessWorker @AssistedInject constructor(
             Timber.e("Gagal update notif: ${e.message}")
         }
     }
+
     private fun generateNewName(originalName: String?, suffix: String): String {
         val name = originalName ?: "image.jpg"
         val dotIndex = name.lastIndexOf('.')
@@ -414,6 +489,7 @@ class BatchProcessWorker @AssistedInject constructor(
             if (suffix.isBlank()) name else "${name}_$suffix"
         }
     }
+
     private fun createForegroundInfo(message: String): ForegroundInfo {
         val channelId = "batch_export_channel"
 

@@ -22,7 +22,9 @@ import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.Scopes
 import com.google.android.gms.common.api.Scope
 import org.json.JSONObject
+import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 data class GoogleUser(
     val id: String,
@@ -118,7 +120,7 @@ class GoogleAuthManager@Inject constructor(@ApplicationContext private val conte
         return null
     }
     fun refreshDriveAccessToken(
-        activity: Activity,
+        context: Context = this.context,
         onTokenReady: (String) -> Unit,
         onNeedConsent: (IntentSender) -> Unit,
         onError: (Exception) -> Unit
@@ -131,7 +133,7 @@ class GoogleAuthManager@Inject constructor(@ApplicationContext private val conte
             )
             .build()
 
-        Identity.getAuthorizationClient(activity)
+        Identity.getAuthorizationClient(context)
             .authorize(request)
             .addOnSuccessListener { result ->
 
@@ -197,12 +199,19 @@ class GoogleAuthManager@Inject constructor(@ApplicationContext private val conte
             .addOnFailureListener(onError)
     }
 
-    suspend fun getFreshAccessToken(activity: Activity): String? = suspendCoroutine { cont ->
+    suspend fun getFreshAccessToken(activityContext: Context? = null): String? = suspendCancellableCoroutine { cont ->
         refreshDriveAccessToken(
-            activity = activity,
-            onTokenReady = { token -> cont.resumeWith(Result.success(token)) },
-            onNeedConsent = { cont.resumeWith(Result.success(null)) },
-            onError = { cont.resumeWith(Result.success(null)) }
+            context = activityContext ?: context,
+            onTokenReady = { token ->
+                if (cont.isActive) cont.resume(token)
+            },
+            onNeedConsent = {
+                if (cont.isActive) cont.resume(null)
+            },
+            onError = { e ->
+                Timber.e(e, "Gagal mendapatkan fresh access token")
+                if (cont.isActive) cont.resume(null)
+            }
         )
     }
 }

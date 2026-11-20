@@ -6,5 +6,6 @@ data class ScanPhoto(
     val uri: Uri,
     val name: String,
     val mime: String,
-    val size: Long
+    val size: Long,
+    val lastModified: Long = 0L
 )

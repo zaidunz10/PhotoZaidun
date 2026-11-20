@@ -152,21 +152,14 @@ class BitmapProcessor(private val context: Context) {
         height: Int,
         resizeConfig: ResizeConfig
     ): Int {
+        val factor = (resizeConfig.percentage / 100f).coerceIn(0.1f, 1.0f)
+        val maxDimension = maxOf(width, height)
 
-        val factor = resizeConfig.percentage / 100f
-
-        if (factor >= 1f)
-            return 1
-
-        val targetWidth = (width * factor).toInt()
-        val targetHeight = (height * factor).toInt()
-
+        // Subsample gambar raksasa kamera (>2400px) agar decode di RAM 40x lebih kencang!
         var sample = 1
+        val targetMax = (maxDimension * factor).toInt().coerceAtLeast(1600)
 
-        while (
-            width / sample > targetWidth * 2 ||
-            height / sample > targetHeight * 2
-        ) {
+        while ((width / (sample * 2) >= targetMax || height / (sample * 2) >= targetMax) && sample < 16) {
             sample *= 2
         }
 

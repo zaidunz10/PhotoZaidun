@@ -20,6 +20,7 @@ import com.zaidun.photozaidun.data.file.ExportFolderRepository
 import androidx.documentfile.provider.DocumentFile
 import androidx.work.ExistingWorkPolicy
 import androidx.work.WorkInfo
+import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.zaidun.photozaidun.data.auth.GoogleAuthManager
 import com.zaidun.photozaidun.data.drive.DriveServiceFactory
 import com.zaidun.photozaidun.data.drive.GoogleDriveRepository
@@ -276,43 +277,72 @@ class HomeViewModel @Inject constructor(
     }
 
     fun loadDriveStorage() {
-
-
         viewModelScope.launch {
-
             try {
-
-                val token = preferences.driveAccessToken.first()
-
-                val drive = driveServiceFactory.create(token)
-
-                val storage = withContext(Dispatchers.IO) {
-
-                    googleDriveRepository.getStorageInfo(drive)
-
+                var token = preferences.driveAccessToken.first()
+                if (token.isBlank()) {
+                    val freshToken = googleAuthManager.getFreshAccessToken()
+                    if (!freshToken.isNullOrBlank()) {
+                        token = freshToken
+                        preferences.saveDriveAccessToken(freshToken)
+                    }
                 }
 
+                if (token.isNotBlank()) {
+                    val drive = driveServiceFactory.create(token)
+                    val storage = withContext(Dispatchers.IO) {
+                        googleDriveRepository.getStorageInfo(drive)
+                    }
+                    _uiState.update {
+                        it.copy(
+                            driveStorage = storage,
+                            loadingDriveStorage = false
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            driveStorage = null,
+                            loadingDriveStorage = false
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                val is401 = (e is GoogleJsonResponseException && e.statusCode == 401) ||
+                        e.message?.contains("401") == true ||
+                        e.cause is GoogleJsonResponseException
+
+                if (is401) {
+                    try {
+                        val freshToken = googleAuthManager.getFreshAccessToken()
+                        if (!freshToken.isNullOrBlank()) {
+                            preferences.saveDriveAccessToken(freshToken)
+                            val drive = driveServiceFactory.create(freshToken)
+                            val storage = withContext(Dispatchers.IO) {
+                                googleDriveRepository.getStorageInfo(drive)
+                            }
+                            _uiState.update {
+                                it.copy(
+                                    driveStorage = storage,
+                                    loadingDriveStorage = false
+                                )
+                            }
+                            return@launch
+                        } else {
+                            preferences.saveDriveAccessToken("")
+                        }
+                    } catch (retryEx: Exception) {
+                        Timber.e(retryEx, "Gagal memuat storage info Google Drive setelah refresh token")
+                    }
+                }
+                Timber.e(e, "Gagal memuat storage info Google Drive")
                 _uiState.update {
                     it.copy(
-                        driveStorage = storage,
-                        loadingDriveStorage = false
+                        loadingDriveStorage = false,
+                        driveStorage = null
                     )
                 }
-
-            }catch (e: Exception) {
-
-                Timber.e(e)
-
-                _uiState.update {
-
-                    it.copy(
-                        loadingDriveStorage = false
-                    )
-
-                }
-
             }
-
         }
     }
 
@@ -364,7 +394,7 @@ class HomeViewModel @Inject constructor(
 
         googleAuthManager.refreshDriveAccessToken(
 
-            activity = activity,
+            context = activity,
 
             onTokenReady = { token ->
 
