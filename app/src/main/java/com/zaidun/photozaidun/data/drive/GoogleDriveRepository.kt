@@ -1,309 +1,309 @@
-package com.zaidun.photozaidun.data.drive
-import com.zaidun.photozaidun.domain.model.DriveStorageInfo
+    package com.zaidun.photozaidun.data.drive
+    import com.zaidun.photozaidun.domain.model.DriveStorageInfo
 
-import android.R.attr.query
-import com.google.api.client.http.FileContent
-import com.google.api.services.drive.Drive
-import com.google.api.services.drive.model.File
-import com.google.api.services.drive.model.Permission
-import timber.log.Timber
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.net.URLConnection
-import java.io.File as JavaFile
-import javax.inject.Inject
+    import android.R.attr.query
+    import com.google.api.client.http.FileContent
+    import com.google.api.services.drive.Drive
+    import com.google.api.services.drive.model.File
+    import com.google.api.services.drive.model.Permission
+    import timber.log.Timber
+    import kotlinx.coroutines.Dispatchers
+    import kotlinx.coroutines.withContext
+    import java.net.URLConnection
+    import java.io.File as JavaFile
+    import javax.inject.Inject
 
-class GoogleDriveRepository @Inject constructor() {
-    suspend fun getStorageInfo(
-        drive: Drive
-    ): DriveStorageInfo = withContext(Dispatchers.IO) {
-        val about = drive.about()
-            .get()
-            .setFields("user,storageQuota")
-            .execute()
+    class GoogleDriveRepository @Inject constructor() {
+        suspend fun getStorageInfo(
+            drive: Drive
+        ): DriveStorageInfo = withContext(Dispatchers.IO) {
+            val about = drive.about()
+                .get()
+                .setFields("user,storageQuota")
+                .execute()
 
-        val quota = about.storageQuota
+            val quota = about.storageQuota
 
-        DriveStorageInfo(
-            email = about.user?.emailAddress ?: "",
-            totalBytes = quota?.limit ?: 0L,
-            usedBytes = quota?.usage ?: 0L
-        )
-    }
-    fun getAllFileNames(
-        drive: Drive,
-        parentFolderId: String
-    ): HashSet<String> {
+            DriveStorageInfo(
+                email = about.user?.emailAddress ?: "",
+                totalBytes = quota?.limit ?: 0L,
+                usedBytes = quota?.usage ?: 0L
+            )
+        }
+        fun getAllFileNames(
+            drive: Drive,
+            parentFolderId: String
+        ): HashSet<String> {
 
-        val fileNames = hashSetOf<String>()
+            val fileNames = hashSetOf<String>()
 
-        var pageToken: String? = null
+            var pageToken: String? = null
 
-        do {
+            do {
+
+                val result = drive.files()
+                    .list()
+                    .setQ("'$parentFolderId' in parents and trashed=false")
+                    .setSpaces("drive")
+                    .setFields("nextPageToken, files(name)")
+                    .setPageToken(pageToken)
+                    .execute()
+
+                result.files?.forEach {
+
+                    fileNames.add(it.name)
+
+                }
+
+                pageToken = result.nextPageToken
+
+            } while (pageToken != null)
+
+            Timber.d("Jumlah file yang sudah ada = ${fileNames.size}")
+
+            return fileNames
+        }
+
+
+        fun findFolder(
+            drive: Drive,
+            folderName: String,
+            parentId: String? = null
+        ): String? {
+
+            val cleanName = folderName.trim()
+
+            val query = buildString {
+                Timber.d("Query: $query")
+                append("mimeType='application/vnd.google-apps.folder'")
+                append(" and trashed=false")
+                append(" and name='$cleanName'")
+
+                if (parentId != null) {
+                    append(" and '$parentId' in parents")
+                } else {
+                    append(" and 'root' in parents")
+                }
+            }
 
             val result = drive.files()
                 .list()
-                .setQ("'$parentFolderId' in parents and trashed=false")
+                .setQ(query)
                 .setSpaces("drive")
-                .setFields("nextPageToken, files(name)")
-                .setPageToken(pageToken)
+                .setFields("files(id,name,createdTime)")
                 .execute()
 
-            result.files?.forEach {
+            val folders = result.files ?: emptyList()
 
-                fileNames.add(it.name)
-
+            if (folders.isEmpty()) {
+                Timber.d("Folder '$cleanName' tidak ditemukan")
+                return null
             }
 
-            pageToken = result.nextPageToken
+            // Jika ada lebih dari satu folder dengan nama sama,
+            // gunakan yang paling lama dibuat.
+            val selected = folders.minByOrNull { it.createdTime.value }!!
 
-        } while (pageToken != null)
+            Timber.d("Menggunakan folder ${selected.name} (${selected.id})")
 
-        Timber.d("Jumlah file yang sudah ada = ${fileNames.size}")
+            return selected.id
+        }
 
-        return fileNames
-    }
+        fun findFolders(
+            drive: Drive,
+            folderName: String,
+            parentId: String? = null
+
+        ): List<File> {
 
 
-    fun findFolder(
-        drive: Drive,
-        folderName: String,
-        parentId: String? = null
-    ): String? {
+            val cleanName = folderName.trim()
 
-        val cleanName = folderName.trim()
+            val query = buildString {
 
-        val query = buildString {
-            Timber.d("Query: $query")
-            append("mimeType='application/vnd.google-apps.folder'")
-            append(" and trashed=false")
-            append(" and name='$cleanName'")
+                append("mimeType='application/vnd.google-apps.folder'")
+                append(" and trashed=false")
+                append(" and name='$cleanName'")
 
-            if (parentId != null) {
-                append(" and '$parentId' in parents")
-            } else {
-                append(" and 'root' in parents")
+                if (parentId != null) {
+                    append(" and '$parentId' in parents")
+                } else {
+                    append(" and 'root' in parents")
+                }
             }
-        }
 
-        val result = drive.files()
-            .list()
-            .setQ(query)
-            .setSpaces("drive")
-            .setFields("files(id,name,createdTime)")
-            .execute()
-
-        val folders = result.files ?: emptyList()
-
-        if (folders.isEmpty()) {
-            Timber.d("Folder '$cleanName' tidak ditemukan")
-            return null
-        }
-
-        // Jika ada lebih dari satu folder dengan nama sama,
-        // gunakan yang paling lama dibuat.
-        val selected = folders.minByOrNull { it.createdTime.value }!!
-
-        Timber.d("Menggunakan folder ${selected.name} (${selected.id})")
-
-        return selected.id
-    }
-
-    fun findFolders(
-        drive: Drive,
-        folderName: String,
-        parentId: String? = null
-
-    ): List<File> {
-
-
-        val cleanName = folderName.trim()
-
-        val query = buildString {
-
-            append("mimeType='application/vnd.google-apps.folder'")
-            append(" and trashed=false")
-            append(" and name='$cleanName'")
-
-            if (parentId != null) {
-                append(" and '$parentId' in parents")
-            } else {
-                append(" and 'root' in parents")
-            }
-        }
-
-        return drive.files()
-            .list()
-            .setQ(query)
-            .setSpaces("drive")
-            .setFields("files(id,name,createdTime)")
-            .execute()
-            .files ?: emptyList()
-    }
-
-    fun createFolder(
-        drive: Drive,
-        folderName: String,
-        parentId: String? = null
-    ): File { // <-- Mengembalikan object File secara penuh, bukan hanya string ID
-
-        val metadata = File().apply {
-            name = folderName
-            mimeType = "application/vnd.google-apps.folder"
-
-            if (parentId != null) {
-                parents = listOf(parentId)
-            }
-        }
-
-        // Meminta Google Drive untuk membuat folder yang BISA DIBACA SEMUA ORANG
-        val createdFile = drive.files()
-            .create(metadata)
-            .setFields("id, webViewLink")
-            .execute()
-
-        // Atur hak akses agar linknya bisa dibaca (Reader / Anyone with link)
-        try {
-            val permission = Permission()
-                .setType("anyone")
-                .setRole("reader")
-            drive.permissions().create(createdFile.id, permission).execute()
-        } catch (e: Exception) {
-            Timber.e(e, "Gagal mengatur permission folder Google Drive")
-        }
-
-        return createdFile
-    }
-
-    fun getOrCreateFolder(
-        drive: Drive,
-        folderName: String,
-        parentId: String? = null
-    ): String {
-
-        val folderId = findFolder(
-            drive,
-            folderName,
-            parentId
-        )
-
-        return if (folderId != null) {
-
-            Timber.d("Folder ditemukan")
-
-            folderId
-
-        } else {
-
-            Timber.d("Folder belum ada, membuat folder baru")
-
-            createFolder(drive, folderName, parentId).id
-
-        }
-    }
-
-    // Fungsi baru khusus untuk Part Folder yang akan dipakai oleh Rider
-    fun getOrCreateFolderWithLink(
-        drive: Drive,
-        folderName: String,
-        parentId: String? = null
-    ): File {
-        val folderId = findFolder(drive, folderName, parentId)
-
-        if (folderId != null) {
-            Timber.d("Folder ditemukan")
-            return drive.files().get(folderId).setFields("id, webViewLink").execute()
-        } else {
-            Timber.d("Folder belum ada, membuat folder baru")
-            return createFolder(drive, folderName, parentId)
-        }
-    }
-
-    fun uploadFile(
-        drive: Drive,
-        localFile: JavaFile,
-        parentFolderId: String? = null
-    ): String {
-
-        val fileName = localFile.name
-
-        // CEK SEKALI LAGI sebelum upload
-        if (parentFolderId != null) {
-
-            val escapedName =
-                fileName.replace("'", "\\'")
-
-            val query =
-                "'$parentFolderId' in parents " +
-                        "and name='$escapedName' " +
-                        "and trashed=false"
-
-            val existing = drive.files()
+            return drive.files()
                 .list()
                 .setQ(query)
                 .setSpaces("drive")
-                .setFields("files(id,name)")
+                .setFields("files(id,name,createdTime)")
                 .execute()
-                .files
-
-            if (!existing.isNullOrEmpty()) {
-
-                val existingFile = existing.first()
-
-                Timber.w(
-                    "SKIP DUPLICATE: $fileName sudah ada " +
-                            "di Drive (${existingFile.id})"
-                )
-
-                return existingFile.id
-            }
+                .files ?: emptyList()
         }
 
-        // Kalau belum ada → upload
-        val metadata = File().apply {
+        fun createFolder(
+            drive: Drive,
+            folderName: String,
+            parentId: String? = null
+        ): File { // <-- Mengembalikan object File secara penuh, bukan hanya string ID
 
-            name = fileName
+            val metadata = File().apply {
+                name = folderName
+                mimeType = "application/vnd.google-apps.folder"
 
-            if (parentFolderId != null) {
-                parents = listOf(parentFolderId)
+                if (parentId != null) {
+                    parents = listOf(parentId)
+                }
             }
+
+            // Meminta Google Drive untuk membuat folder yang BISA DIBACA SEMUA ORANG
+            val createdFile = drive.files()
+                .create(metadata)
+                .setFields("id, webViewLink")
+                .execute()
+
+            // Atur hak akses agar linknya bisa dibaca (Reader / Anyone with link)
+            try {
+                val permission = Permission()
+                    .setType("anyone")
+                    .setRole("reader")
+                drive.permissions().create(createdFile.id, permission).execute()
+            } catch (e: Exception) {
+                Timber.e(e, "Gagal mengatur permission folder Google Drive")
+            }
+
+            return createdFile
         }
 
-        val mimeType =
-            URLConnection.guessContentTypeFromName(fileName)
-                ?: "application/octet-stream"
+        fun getOrCreateFolder(
+            drive: Drive,
+            folderName: String,
+            parentId: String? = null
+        ): String {
 
-        val media =
-            FileContent(
-                mimeType,
-                localFile
+            val folderId = findFolder(
+                drive,
+                folderName,
+                parentId
             )
 
-        val request =
-            drive.files()
-                .create(metadata, media)
-                .setFields("id,name")
+            return if (folderId != null) {
 
-        request
-            .mediaHttpUploader
-            .isDirectUploadEnabled = true
+                Timber.d("Folder ditemukan")
 
-        val uploaded =
-            request.execute()
+                folderId
 
-        Timber.d(
-            "Upload berhasil: ${uploaded.name} (${uploaded.id})"
-        )
+            } else {
 
-        return uploaded.id
-    }
+                Timber.d("Folder belum ada, membuat folder baru")
 
-   suspend fun deleteFolder(drive: Drive, folderId: String)= withContext (Dispatchers.IO) {
-        try {
-            drive.files().delete(folderId).execute()
-            Timber.d("Google Drive: Folder ID $folderId berhasil dihapus!")
-        } catch (e: Exception) {
-            Timber.e(e, "Google Drive: Gagal menghapus folder ID $folderId")
+                createFolder(drive, folderName, parentId).id
+
+            }
+        }
+
+        // Fungsi baru khusus untuk Part Folder yang akan dipakai oleh Rider
+        fun getOrCreateFolderWithLink(
+            drive: Drive,
+            folderName: String,
+            parentId: String? = null
+        ): File {
+            val folderId = findFolder(drive, folderName, parentId)
+
+            if (folderId != null) {
+                Timber.d("Folder ditemukan")
+                return drive.files().get(folderId).setFields("id, webViewLink").execute()
+            } else {
+                Timber.d("Folder belum ada, membuat folder baru")
+                return createFolder(drive, folderName, parentId)
+            }
+        }
+
+        fun uploadFile(
+            drive: Drive,
+            localFile: JavaFile,
+            parentFolderId: String? = null
+        ): String {
+
+            val fileName = localFile.name
+
+            // CEK SEKALI LAGI sebelum upload
+            if (parentFolderId != null) {
+
+                val escapedName =
+                    fileName.replace("'", "\\'")
+
+                val query =
+                    "'$parentFolderId' in parents " +
+                            "and name='$escapedName' " +
+                            "and trashed=false"
+
+                val existing = drive.files()
+                    .list()
+                    .setQ(query)
+                    .setSpaces("drive")
+                    .setFields("files(id,name)")
+                    .execute()
+                    .files
+
+                if (!existing.isNullOrEmpty()) {
+
+                    val existingFile = existing.first()
+
+                    Timber.w(
+                        "SKIP DUPLICATE: $fileName sudah ada " +
+                                "di Drive (${existingFile.id})"
+                    )
+
+                    return existingFile.id
+                }
+            }
+
+            // Kalau belum ada → upload
+            val metadata = File().apply {
+
+                name = fileName
+
+                if (parentFolderId != null) {
+                    parents = listOf(parentFolderId)
+                }
+            }
+
+            val mimeType =
+                URLConnection.guessContentTypeFromName(fileName)
+                    ?: "application/octet-stream"
+
+            val media =
+                FileContent(
+                    mimeType,
+                    localFile
+                )
+
+            val request =
+                drive.files()
+                    .create(metadata, media)
+                    .setFields("id,name")
+
+            request
+                .mediaHttpUploader
+                .isDirectUploadEnabled = true
+
+            val uploaded =
+                request.execute()
+
+            Timber.d(
+                "Upload berhasil: ${uploaded.name} (${uploaded.id})"
+            )
+
+            return uploaded.id
+        }
+
+       suspend fun deleteFolder(drive: Drive, folderId: String)= withContext (Dispatchers.IO) {
+            try {
+                drive.files().delete(folderId).execute()
+                Timber.d("Google Drive: Folder ID $folderId berhasil dihapus!")
+            } catch (e: Exception) {
+                Timber.e(e, "Google Drive: Gagal menghapus folder ID $folderId")
+            }
         }
     }
-}

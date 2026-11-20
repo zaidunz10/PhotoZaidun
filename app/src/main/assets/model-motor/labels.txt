@@ -1,17 +1,18 @@
-0 Beat
-1 Vario
-2 Scoopy
-3 PCX
-4 ADV
-5 Nmax
-6 Aerox
-7 Mio
-8 Vespa Matic
-9 Xmax
-10 Forza
-11 R15
-12 Ninja 150
-13 CBR150
-14 CBR 250
-15 ZX25R
-16 Satria FU
+Beat
+Vario
+Scoopy
+PCX
+ADV
+Nmax
+Aerox
+Mio
+Vespa Matic
+Xmax
+Forza
+R15
+Ninja 150
+CBR150
+CBR 250
+ZX25R
+Satria FU
+Lainnya

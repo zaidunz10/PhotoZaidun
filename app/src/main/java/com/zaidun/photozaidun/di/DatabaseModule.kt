@@ -52,4 +52,10 @@ object DatabaseModule {
     fun provideWatermarkDao(
         database: PhotoZaidunDatabase
     ) = database.watermarkTemplateDao()
+
+    @Provides
+    @Singleton
+    fun providePhotoAiMetadataDao(
+        database: PhotoZaidunDatabase
+    ) = database.photoAiMetadataDao()
 }

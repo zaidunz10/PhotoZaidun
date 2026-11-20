@@ -10,7 +10,9 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.zaidun.photozaidun.presentation.screen.settings.FolderLevel
 import androidx.datastore.preferences.preferencesDataStore
+import com.zaidun.photozaidun.data.auth.GoogleAuthManager
 import com.zaidun.photozaidun.data.auth.GoogleUser
+import com.zaidun.photozaidun.data.remote.gemini.GeminiApiKeyItem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import timber.log.Timber
@@ -66,6 +68,9 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
         private val DEFAULT_PHOTO_PRICE_KEY = intPreferencesKey("default_photo_price")
         private val MIN_QTY_DISCOUNT_KEY = intPreferencesKey("min_qty_discount")
         private val PRICE_DISCOUNT_KEY = intPreferencesKey("price_discount")
+
+        private val GEMINI_API_KEYS = stringPreferencesKey("gemini_api_keys")
+        private val SELECTED_GEMINI_MODEL = stringPreferencesKey("selected_gemini_model")
     }
 
     val userId: Flow<String> = context.dataStore.data.map { it[USER_ID_KEY] ?: "" }
@@ -307,6 +312,36 @@ class UserPreferencesDataStore @Inject constructor(@dagger.hilt.android.qualifie
     val defaultPhotoPrice: Flow<Int> = context.dataStore.data.map { it[DEFAULT_PHOTO_PRICE_KEY] ?: 10000 }
     val minQtyDiscount: Flow<Int> = context.dataStore.data.map { it[MIN_QTY_DISCOUNT_KEY] ?: 3 }
     val priceDiscount: Flow<Int?> = context.dataStore.data.map { it[PRICE_DISCOUNT_KEY] }
+
+    val geminiApiKeys: Flow<List<GeminiApiKeyItem>> =
+        context.dataStore.data.map { preferences ->
+            val json = preferences[GEMINI_API_KEYS]
+            if (json.isNullOrBlank()) {
+                emptyList()
+            } else {
+                try {
+                    val type = object : TypeToken<List<GeminiApiKeyItem>>() {}.type
+                    gson.fromJson(json, type)
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            }
+        }
+
+    val selectedGeminiModel: Flow<String> =
+        context.dataStore.data.map { it[SELECTED_GEMINI_MODEL] ?: "gemini-3.5-flash-lite" }
+
+    suspend fun saveGeminiApiKeys(keys: List<GeminiApiKeyItem>) {
+        context.dataStore.edit {
+            it[GEMINI_API_KEYS] = gson.toJson(keys)
+        }
+    }
+
+    suspend fun saveSelectedGeminiModel(model: String) {
+        context.dataStore.edit {
+            it[SELECTED_GEMINI_MODEL] = model
+        }
+    }
 
     suspend fun saveBankAndPricingInfo(
         bank: String,

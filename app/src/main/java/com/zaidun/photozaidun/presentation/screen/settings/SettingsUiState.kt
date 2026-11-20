@@ -1,6 +1,7 @@
 package com.zaidun.photozaidun.presentation.screen.settings
 
 import com.zaidun.photozaidun.data.auth.GoogleUser
+import com.zaidun.photozaidun.data.remote.gemini.GeminiApiKeyItem
 import com.zaidun.photozaidun.domain.model.DriveStorageInfo
 
 data class SettingsUiState(
@@ -28,8 +29,12 @@ data class SettingsUiState(
 
     val showFilename: Boolean = false,
     val showPart: Boolean = true,
-    val autoUpload: Boolean = false
+    val autoUpload: Boolean = false,
 
+    val geminiApiKeys: List<GeminiApiKeyItem> = emptyList(),
+    val selectedGeminiModel: String = "gemini-3.5-flash-lite",
+    val isVerifyingKey: Boolean = false,
+    val keyVerifyError: String? = null
 )
 data class FolderLevel(
     val id: Long = System.currentTimeMillis(),

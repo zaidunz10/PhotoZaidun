@@ -64,6 +64,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.platform.LocalClipboardManager
+import com.zaidun.photozaidun.data.remote.gemini.GeminiApiKeyItem
 import kotlin.math.PI
 import kotlin.math.sin
 
@@ -411,6 +417,11 @@ fun SettingsScreen(
 
 
 
+            // Section AI Auto-Tagging Gemini
+            item {
+                GeminiSettingsSection(uiState = uiState, viewModel = viewModel)
+            }
+
             // Preview Section
             item {
                 Card(
@@ -683,6 +694,266 @@ private fun WaveSlider(
             drawCircle(color = DeepPurple.copy(alpha = 0.18f), radius = 14.dp.toPx(), center = Offset(activeWidth, thumbY))
             drawCircle(color = DeepPurple, radius = 9.dp.toPx(), center = Offset(activeWidth, thumbY))
             drawCircle(color = Color.White, radius = 3.5.dp.toPx(), center = Offset(activeWidth, thumbY))
+        }
+    }
+}
+
+@Composable
+private fun GeminiSettingsSection(
+    uiState: SettingsUiState,
+    viewModel: SettingsViewModel
+) {
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+    var inputLabel by remember { mutableStateOf("") }
+    var inputKey by remember { mutableStateOf("") }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "🤖 AI Auto-Tagging (Gemini API)",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    color = TitleDark
+                )
+            }
+
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Pilih model Gemini & kelola API Key untuk tag otomatis model motor, plat, dan warna.",
+                fontSize = 11.sp,
+                color = SubtleGray
+            )
+
+            Spacer(Modifier.height(14.dp))
+            Text("Pilihan Model Gemini:", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = TitleDark)
+            Spacer(Modifier.height(4.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { viewModel.saveSelectedGeminiModel("gemini-2.5-flash-lite") }) {
+                RadioButton(
+                    selected = uiState.selectedGeminiModel == "gemini-2.5-flash-lite",
+                    onClick = { viewModel.saveSelectedGeminiModel("gemini-2.5-flash-lite") }
+                )
+                Text("Gemini 2.5 Flash-Lite (Cepat & Hemat)", fontSize = 12.sp, color = TitleDark)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { viewModel.saveSelectedGeminiModel("gemini-3.5-flash-lite") }) {
+                RadioButton(
+                    selected = uiState.selectedGeminiModel == "gemini-3.5-flash-lite",
+                    onClick = { viewModel.saveSelectedGeminiModel("gemini-3.5-flash-lite") }
+                )
+                Text("Gemini 3.5 Flash-Lite (Akurasi Tinggi)", fontSize = 12.sp, color = TitleDark)
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            // Tombol Buat API Key Gratis
+            OutlinedButton(
+                onClick = {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/api-keys"))
+                    context.startActivity(intent)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("🔑 Buat API Key Gratis di Google AI Studio", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+
+            Spacer(Modifier.height(14.dp))
+            HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f))
+            Spacer(Modifier.height(12.dp))
+
+            Text("Tambah API Key Baru:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TitleDark)
+            Spacer(Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = inputLabel,
+                onValueChange = { inputLabel = it },
+                label = { Text("Label (Opsional, misal: Akun 1)") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                shape = RoundedCornerShape(10.dp)
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = inputKey,
+                    onValueChange = { inputKey = it },
+                    label = { Text("API Key (AIzaSy...)") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+
+                Spacer(Modifier.width(8.dp))
+
+                TextButton(
+                    onClick = {
+                        val clipText = clipboardManager.getText()?.text
+                        if (!clipText.isNullOrBlank()) inputKey = clipText
+                    }
+                ) {
+                    Text("Tempel", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            }
+
+            if (uiState.keyVerifyError != null) {
+                Spacer(Modifier.height(4.dp))
+                Text(uiState.keyVerifyError!!, color = Color.Red, fontSize = 11.sp)
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            Button(
+                onClick = {
+                    viewModel.verifyAndAddGeminiKey(
+                        label = inputLabel,
+                        apiKey = inputKey,
+                        onSuccess = {
+                            inputLabel = ""
+                            inputKey = ""
+                            Toast.makeText(context, "API Key Berhasil Disimpan!", Toast.LENGTH_SHORT).show()
+                        },
+                        onError = { err ->
+                            Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                },
+                enabled = !uiState.isVerifyingKey && inputKey.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = AccentPurple)
+            ) {
+                if (uiState.isVerifyingKey) {
+                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Memverifikasi Key...", fontSize = 12.sp)
+                } else {
+                    Text("Tes & Simpan Key", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
+            HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f))
+            Spacer(Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Daftar API Key Tersimpan (${uiState.geminiApiKeys.size}):", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TitleDark)
+
+                if (uiState.geminiApiKeys.any { it.isQuotaExceeded }) {
+                    TextButton(onClick = { viewModel.resetGeminiQuotaFlags() }) {
+                        Text("Reset Limit", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AccentPurple)
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            if (uiState.geminiApiKeys.isEmpty()) {
+                Surface(
+                    color = Color.Yellow.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "⚠️ Belum ada API Key aktif. Ekspor & upload tetap berjalan normal, tetapi AI Auto-Tagging akan dilewati.",
+                        fontSize = 11.sp,
+                        color = Color(0xFF856404),
+                        modifier = Modifier.padding(10.dp)
+                    )
+                }
+            } else {
+                uiState.geminiApiKeys.forEach { item ->
+                    KeyItemRow(
+                        item = item,
+                        onToggle = { active -> viewModel.toggleGeminiKeyActive(item.id, active) },
+                        onDelete = { viewModel.removeGeminiKey(item.id) }
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun KeyItemRow(
+    item: GeminiApiKeyItem,
+    onToggle: (Boolean) -> Unit,
+    onDelete: () -> Unit
+) {
+    val maskedKey = if (item.apiKey.length > 8) {
+        "${item.apiKey.take(6)}••••${item.apiKey.takeLast(4)}"
+    } else {
+        "••••••••"
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = ScreenBg),
+        border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(item.label, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = TitleDark)
+                    Spacer(Modifier.width(8.dp))
+                    when {
+                        item.isQuotaExceeded -> {
+                            Surface(color = Color(0xFFFFF3CD), shape = RoundedCornerShape(4.dp)) {
+                                Text("Limit 429", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF856404), modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                            }
+                        }
+                        item.isActive -> {
+                            Surface(color = Color(0xFFD4EDDA), shape = RoundedCornerShape(4.dp)) {
+                                Text("Aktif", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF155724), modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                            }
+                        }
+                        else -> {
+                            Surface(color = Color(0xFFE2E3E5), shape = RoundedCornerShape(4.dp)) {
+                                Text("Nonaktif", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF383D41), modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(2.dp))
+                Text(maskedKey, fontSize = 11.sp, color = LabelGray)
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(
+                    checked = item.isActive,
+                    onCheckedChange = onToggle,
+                    colors = SwitchDefaults.colors(checkedThumbColor = AccentPurple)
+                )
+                Spacer(Modifier.width(4.dp))
+                IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Delete, contentDescription = "Hapus", tint = Color.Red.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
+                }
+            }
         }
     }
 }

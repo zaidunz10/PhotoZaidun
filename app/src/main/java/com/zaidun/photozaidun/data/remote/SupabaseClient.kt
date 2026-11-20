@@ -53,6 +53,19 @@ data class SessionLocationDto(
     @SerialName("is_published") val isPublished: Boolean? = true
 )
 
+// DTO untuk Insert Foto & Metadata AI ke Tabel `photos` Supabase
+@Serializable
+data class PhotoInsertDto(
+    @SerialName("session_id") val sessionId: Long,
+    @SerialName("drive_file_id") val driveFileId: String? = null,
+    @SerialName("file_name") val fileName: String,
+    @SerialName("exif_time") val exifTime: String? = null,
+    @SerialName("bike_model") val bikeModel: String? = null,
+    @SerialName("plate_number") val plateNumber: String? = null,
+    @SerialName("bike_color") val bikeColor: String? = null,
+    @SerialName("jacket_color") val jacketColor: String? = null
+)
+
 object SupabaseHelper {
     val client: SupabaseClient by lazy {
         createSupabaseClient(

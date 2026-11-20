@@ -21,7 +21,9 @@ import com.zaidun.photozaidun.data.auth.GoogleAuthManager
 import com.zaidun.photozaidun.data.drive.DriveServiceFactory
 import com.zaidun.photozaidun.data.drive.GoogleDriveRepository
 import com.zaidun.photozaidun.data.drive.copyToCache
+import com.zaidun.photozaidun.data.local.dao.PhotoAiMetadataDao
 import com.zaidun.photozaidun.data.local.datastore.UserPreferencesDataStore
+import com.zaidun.photozaidun.data.remote.PhotoInsertDto
 import com.zaidun.photozaidun.data.remote.SessionInsertDto
 import com.zaidun.photozaidun.data.remote.SessionResponseDto
 import com.zaidun.photozaidun.data.remote.SessionUpdateDriveDto
@@ -30,6 +32,7 @@ import com.zaidun.photozaidun.utils.SoundPlayer
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import io.github.jan.supabase.postgrest.postgrest
+import kotlinx.coroutines.CancellationException
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -67,7 +70,8 @@ class DriveUploadWorker @AssistedInject constructor(
     private val preferences: UserPreferencesDataStore,
     private val driveServiceFactory: DriveServiceFactory,
     private val repository: GoogleDriveRepository,
-    private val googleAuthManager: GoogleAuthManager
+    private val googleAuthManager: GoogleAuthManager,
+    private val photoAiMetadataDao: PhotoAiMetadataDao
 ) : CoroutineWorker(context, params) {
 
     private val notificationManager =
@@ -78,15 +82,26 @@ class DriveUploadWorker @AssistedInject constructor(
         const val KEY_ACCESS_TOKEN = "access_token"
         const val KEY_EXPECTED_COUNT = "expected_count"
         const val KEY_HOUR_FOLDER = "hour_folder"
-        private const val NOTIFICATION_ID = 101
         private const val CHANNEL_ID = "drive_upload_channel"
         private const val COMPLETED_CHANNEL_ID = "drive_upload_completed_channel"
         private const val UPLOAD_PARALLELISM = 25
     }
 
+    private val notificationId: Int by lazy {
+        val folderUri = inputData.getString(KEY_FOLDER_URI).orEmpty()
+        1000 + (Math.abs(folderUri.hashCode()) % 8999)
+    }
+
     override suspend fun doWork(): Result {
+        val uploadStart = System.currentTimeMillis()
         Timber.tag("DriveUpload").d("=== DRIVE UPLOAD WORKER STARTED ===")
         SoundPlayer.playAssetSound(applicationContext, "memulai upload.mp3")
+
+        try {
+            setForeground(createForegroundInfo("Menyiapkan unggahan ke Google Drive..."))
+        } catch (e: Exception) {
+            Timber.e("Gagal setForeground DriveUploadWorker: ${e.message}")
+        }
 
         val folderUriString = inputData.getString(KEY_FOLDER_URI)
         if (folderUriString.isNullOrBlank()) {
@@ -152,6 +167,8 @@ class DriveUploadWorker @AssistedInject constructor(
 
             Timber.tag("DriveUpload").d("Location = $locationNameStr | Link Supabase = $finalDriveLink | Parent Drive ID = $uploadParentId")
 
+            var activeSessionId: Long = inputData.getLong("session_id", -1L)
+
             // UPDATE / SIMPAN KE SUPABASE DENGAN KUNCI UTAMA: LINK GOOGLE DRIVE (drive_folder_id)
             val isPublished = inputData.getBoolean("is_published", true)
             if (finalDriveLink.isNotBlank()) {
@@ -170,6 +187,7 @@ class DriveUploadWorker @AssistedInject constructor(
                     val existingId = existingSessions.lastOrNull()?.id
 
                     if (existingId != null && existingId > 0L) {
+                        activeSessionId = existingId
                         val updateDto = SessionUpdateDriveDto(
                             driveFolderId = finalDriveLink,
                             isPublished = isPublished
@@ -203,6 +221,7 @@ class DriveUploadWorker @AssistedInject constructor(
                                 select()
                             }.decodeSingle<SessionResponseDto>()
 
+                        activeSessionId = response.id
                         Timber.tag("DriveUpload").d("Supabase: Link Drive BERBEDA -> Berhasil buat Sesi BARU ID: ${response.id}")
                     }
                 } catch (e: Exception) {
@@ -259,8 +278,12 @@ class DriveUploadWorker @AssistedInject constructor(
                 localDir = folder,
                 parentDriveFolderId = targetDriveFolderId,
                 totalUploaded = totalUploaded,
-                totalFilesCount = totalFiles
+                totalFilesCount = totalFiles,
+                sessionId = activeSessionId
             )
+
+            val totalUploadDuration = System.currentTimeMillis() - uploadStart
+            Timber.tag("DriveUpload").i("🎉 TOTAL UPLOAD GOOGLE DRIVE SELESAI: $totalFiles foto dalam ${totalUploadDuration / 1000f} detik (${totalUploadDuration} ms)")
 
             showFinalNotification(true, "Berhasil mengunggah $totalFiles foto ke Google Drive")
             Result.success()
@@ -277,6 +300,10 @@ class DriveUploadWorker @AssistedInject constructor(
             showFinalNotification(false, "Gagal upload: ${e.details?.message ?: e.message}")
             Result.retry()
         } catch (e: Exception) {
+            if (e is CancellationException || isStopped) {
+                Timber.tag("DriveUpload").w("DriveUploadWorker dibatalkan atau diganti oleh sistem.")
+                throw e
+            }
             Timber.tag("DriveUpload").e(e, "Unexpected Upload Error")
             showFinalNotification(false, "Gagal upload: ${e.message}")
             Result.retry()
@@ -289,7 +316,8 @@ class DriveUploadWorker @AssistedInject constructor(
         parentDriveFolderId: String,
         totalUploaded: AtomicInteger,
         totalFilesCount: Int,
-        isRoot: Boolean = false
+        isRoot: Boolean = false,
+        sessionId: Long = -1L
     ) {
         val items = localDir.listFiles()
 
@@ -312,11 +340,12 @@ class DriveUploadWorker @AssistedInject constructor(
                                 try {
                                     tempCacheFile = document.copyToCache(applicationContext)
                                     if (tempCacheFile != null) {
+                                        var uploadedFileId = ""
                                         var uploadSuccess = false
                                         var attempts = 0
                                         while (!uploadSuccess && attempts < 3 && !isStopped) {
                                             try {
-                                                repository.uploadFile(
+                                                uploadedFileId = repository.uploadFile(
                                                     drive = drive,
                                                     localFile = tempCacheFile,
                                                     parentFolderId = parentDriveFolderId
@@ -332,6 +361,27 @@ class DriveUploadWorker @AssistedInject constructor(
                                         if (uploadSuccess) {
                                             val count = totalUploaded.incrementAndGet()
                                             updateNotificationProgress(count, totalFilesCount, localDir.name ?: "")
+
+                                            // Push Metadata ke Supabase `photos` jika ada sessionId
+                                            if (sessionId > 0L && uploadedFileId.isNotBlank()) {
+                                                try {
+                                                    val aiMeta = photoAiMetadataDao.getMetadata(fileName)
+                                                    val photoDto = PhotoInsertDto(
+                                                        sessionId = sessionId,
+                                                        driveFileId = uploadedFileId,
+                                                        fileName = fileName,
+                                                        exifTime = aiMeta?.exifTime,
+                                                        bikeModel = aiMeta?.bikeModel,
+                                                        plateNumber = aiMeta?.plateNumber,
+                                                        bikeColor = aiMeta?.bikeColor,
+                                                        jacketColor = aiMeta?.jacketColor
+                                                    )
+                                                    SupabaseHelper.client.postgrest["photos"].insert(photoDto)
+                                                    Timber.tag("AI_SCAN").i("🚀 Supabase Insert Metadata Foto [$fileName]: Model=${aiMeta?.bikeModel}, Plat=${aiMeta?.plateNumber}, Motor=${aiMeta?.bikeColor}, Jaket=${aiMeta?.jacketColor}, ExifTime=${aiMeta?.exifTime}")
+                                                } catch (sbEx: Exception) {
+                                                    Timber.tag("AI_SCAN").e(sbEx, "Supabase: Gagal insert metadata foto $fileName")
+                                                }
+                                            }
                                         }
                                     }
                                 } catch (e: Exception) {
@@ -358,7 +408,8 @@ class DriveUploadWorker @AssistedInject constructor(
                 parentDriveFolderId = driveSubFolderId,
                 totalUploaded = totalUploaded,
                 totalFilesCount = totalFilesCount,
-                isRoot = false
+                isRoot = false,
+                sessionId = sessionId
             )
         }
     }
@@ -369,7 +420,7 @@ class DriveUploadWorker @AssistedInject constructor(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 setForeground(
                     ForegroundInfo(
-                        NOTIFICATION_ID,
+                        notificationId,
                         createForegroundInfo(progressText).notification,
                         ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
                     )
@@ -394,9 +445,9 @@ class DriveUploadWorker @AssistedInject constructor(
             .build()
 
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ForegroundInfo(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            ForegroundInfo(notificationId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
-            ForegroundInfo(NOTIFICATION_ID, notification)
+            ForegroundInfo(notificationId, notification)
         }
     }
 
@@ -421,7 +472,7 @@ class DriveUploadWorker @AssistedInject constructor(
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
 
-        notificationManager.notify(NOTIFICATION_ID + 1, notification)
+        notificationManager.notify(notificationId + 10000, notification)
     }
 
     private fun createNotificationChannel() {

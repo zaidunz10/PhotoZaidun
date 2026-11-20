@@ -20,6 +20,55 @@ class BitmapProcessor(private val context: Context) {
         drawer.clearCache()
     }
 
+    fun decodeAndResize(
+        inputUri: Uri,
+        resizeConfig: ResizeConfig
+    ): Bitmap? {
+        val exifInfo = readExif(inputUri)
+        val bitmap = loadFixedBitmap(
+            inputUri,
+            resizeConfig,
+            exifInfo.orientation
+        ) ?: return null
+
+        val resized = resize(bitmap, resizeConfig)
+        if (resized != bitmap) {
+            bitmap.recycle()
+        }
+        return resized
+    }
+
+    fun applyWatermarkAndSave(
+        resizedBitmap: Bitmap,
+        watermarkConfig: WatermarkConfig,
+        inputUri: Uri,
+        fileName: String,
+        partName: String,
+        compressionConfig: CompressionConfig,
+        outputStream: OutputStream,
+        showTimestamp: Boolean
+    ) {
+        val exifInfo = readExif(inputUri)
+        val exifDate = if (showTimestamp) exifInfo.date else ""
+
+        val watermarkStart = System.currentTimeMillis()
+        val watermarked = applyWatermark(resizedBitmap, fileName, partName, exifDate, watermarkConfig)
+        Timber.tag("EXPORT_PERF").d(
+            "Watermark $fileName = ${System.currentTimeMillis() - watermarkStart} ms"
+        )
+
+        val format = when (compressionConfig.format) {
+            OutputFormat.PNG -> Bitmap.CompressFormat.PNG
+            OutputFormat.WEBP -> Bitmap.CompressFormat.WEBP
+            else -> Bitmap.CompressFormat.JPEG
+        }
+        val compressStart = System.currentTimeMillis()
+        watermarked.compress(format, compressionConfig.quality, outputStream)
+        Timber.tag("EXPORT_PERF").d(
+            "Compress $fileName = ${System.currentTimeMillis() - compressStart} ms"
+        )
+    }
+
     fun process(
         inputUri: Uri,
         watermarkConfig: WatermarkConfig,
@@ -30,55 +79,20 @@ class BitmapProcessor(private val context: Context) {
         outputStream: OutputStream,
         showTimestamp: Boolean
     ) {
-        val exifInfo =
-            readExif(inputUri)
-
-        val exifDate =
-            if (showTimestamp)
-                exifInfo.date
-            else
-                ""
-
-        var bitmap: Bitmap? = null
-        val decodeStart = System.currentTimeMillis()
+        val resized = decodeAndResize(inputUri, resizeConfig) ?: return
         try {
-            bitmap = loadFixedBitmap(
-                inputUri,
-                resizeConfig,
-                exifInfo.orientation
-            ) ?: return
-            Timber.tag("EXPORT_PERF").d(
-                "Decode $fileName = ${System.currentTimeMillis() - decodeStart} ms"
+            applyWatermarkAndSave(
+                resizedBitmap = resized,
+                watermarkConfig = watermarkConfig,
+                inputUri = inputUri,
+                fileName = fileName,
+                partName = partName,
+                compressionConfig = compressionConfig,
+                outputStream = outputStream,
+                showTimestamp = showTimestamp
             )
-
-            // 1. Resize
-            val resized = resize(bitmap, resizeConfig)
-            if (resized != bitmap) { bitmap.recycle(); bitmap = resized }
-
-
-            val watermarkStart = System.currentTimeMillis()
-            val watermarked = applyWatermark(bitmap, fileName, partName, exifDate, watermarkConfig)
-            Timber.tag("EXPORT_PERF").d(
-                "Watermark $fileName = ${System.currentTimeMillis() - watermarkStart} ms"
-            )
-            if (watermarked != bitmap) { bitmap.recycle(); bitmap = watermarked }
-
-            // 3. Simpan
-            val format = when (compressionConfig.format) {
-                OutputFormat.PNG -> Bitmap.CompressFormat.PNG
-                OutputFormat.WEBP -> Bitmap.CompressFormat.WEBP
-                else -> Bitmap.CompressFormat.JPEG
-            }
-            val compressStart = System.currentTimeMillis()
-            bitmap.compress(format, compressionConfig.quality, outputStream)
-            Timber.tag("EXPORT_PERF").d(
-                "Compress $fileName = ${System.currentTimeMillis() - compressStart} ms"
-            )
-        } catch (e: Exception) {
-            Timber.e(e, "Gagal memproses bitmap")
-            throw e
         } finally {
-            bitmap?.recycle()
+            if (!resized.isRecycled) resized.recycle()
         }
     }
     private var cachedLogo: Bitmap? = null

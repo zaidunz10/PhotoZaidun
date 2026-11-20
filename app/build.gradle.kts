@@ -208,12 +208,6 @@ dependencies {
     implementation(libs.ktor.client.android)
     implementation(libs.kotlinx.serialization.json)
 
-    // ML Kit & Palette API (On-Device AI Pre-Processing)
-    implementation("com.google.mlkit:object-detection:17.0.2")
-    implementation("com.google.mlkit:text-recognition:16.0.1")
-    implementation("com.google.mlkit:image-labeling-custom:17.0.2")
-    implementation("androidx.palette:palette-ktx:1.0.0")
-
     testImplementation(libs.junit)
 
     androidTestImplementation(platform(libs.androidx.compose.bom))

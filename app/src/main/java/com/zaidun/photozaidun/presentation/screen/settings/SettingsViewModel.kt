@@ -8,6 +8,7 @@ import com.zaidun.photozaidun.data.local.datastore.UserPreferencesDataStore
 import com.zaidun.photozaidun.data.auth.GoogleAuthManager
 import com.zaidun.photozaidun.data.auth.GoogleUser
 import com.zaidun.photozaidun.data.remote.UserLogger
+import com.zaidun.photozaidun.data.remote.gemini.GeminiKeyManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -17,8 +18,8 @@ import javax.inject.Inject
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val preferences: UserPreferencesDataStore,
-    private val googleAuthManager: GoogleAuthManager
-
+    private val googleAuthManager: GoogleAuthManager,
+    private val geminiKeyManager: GeminiKeyManager
 ) : ViewModel() {
     private fun saveFolderLevels() {
 
@@ -169,6 +170,70 @@ class SettingsViewModel @Inject constructor(
                     )
                 }
             }.collect()
+        }
+
+        viewModelScope.launch {
+            preferences.geminiApiKeys.collect { keys ->
+                _uiState.update { it.copy(geminiApiKeys = keys) }
+            }
+        }
+
+        viewModelScope.launch {
+            preferences.selectedGeminiModel.collect { model ->
+                _uiState.update { it.copy(selectedGeminiModel = model) }
+            }
+        }
+    }
+
+    fun saveSelectedGeminiModel(model: String) {
+        _uiState.update { it.copy(selectedGeminiModel = model) }
+        viewModelScope.launch {
+            preferences.saveSelectedGeminiModel(model)
+        }
+    }
+
+    fun verifyAndAddGeminiKey(
+        label: String,
+        apiKey: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        if (apiKey.isBlank()) {
+            onError("API Key tidak boleh kosong")
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isVerifyingKey = true, keyVerifyError = null) }
+            val result = geminiKeyManager.verifyApiKey(apiKey)
+            _uiState.update { it.copy(isVerifyingKey = false) }
+
+            if (result.isSuccess) {
+                geminiKeyManager.addApiKey(label, apiKey)
+                onSuccess()
+            } else {
+                val err = result.exceptionOrNull()?.message ?: "Gagal memverifikasi API Key"
+                _uiState.update { it.copy(keyVerifyError = err) }
+                onError(err)
+            }
+        }
+    }
+
+    fun removeGeminiKey(id: String) {
+        viewModelScope.launch {
+            geminiKeyManager.removeApiKey(id)
+        }
+    }
+
+    fun toggleGeminiKeyActive(id: String, active: Boolean) {
+        viewModelScope.launch {
+            geminiKeyManager.toggleKeyActive(id, active)
+        }
+    }
+
+    fun resetGeminiQuotaFlags() {
+        viewModelScope.launch {
+            geminiKeyManager.resetAllQuotaFlags()
         }
     }
 
