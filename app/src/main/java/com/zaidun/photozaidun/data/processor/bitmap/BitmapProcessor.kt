@@ -212,16 +212,9 @@ class BitmapProcessor(private val context: Context) {
             inMutable = true
         }
 
-        val original = resolver.openInputStream(uri)?.use {
+        val mutableBitmap = resolver.openInputStream(uri)?.use {
             BitmapFactory.decodeStream(it, null, options)
         } ?: return null
-        val mutableBitmap =
-            if (original.isMutable)
-                original
-            else
-                original.copy(Bitmap.Config.ARGB_8888, true).also {
-                    original.recycle()
-                }
 
         val matrix = Matrix()
 

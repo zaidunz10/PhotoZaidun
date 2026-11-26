@@ -6,13 +6,15 @@ ADV
 Nmax
 Aerox
 Mio
-Vespa Matic
+Vespa
 Xmax
 Forza
 R15
-Ninja 150
-CBR150
-CBR 250
+Ninja
+CBR
 ZX25R
-Satria FU
+Satria
+Xenia
+Avanza
+Harley-Davidson
 Lainnya

@@ -730,42 +730,52 @@ private fun GeminiSettingsSection(
 
             Spacer(Modifier.height(6.dp))
             Text(
-                "Pilih model Gemini & kelola API Key untuk tag otomatis model motor, plat, dan warna.",
+                "Kelola API Key Gemini Flash-Lite untuk tag otomatis model motor, plat, dan warna.",
                 fontSize = 11.sp,
                 color = SubtleGray
             )
 
             Spacer(Modifier.height(14.dp))
-            Text("Pilihan Model Gemini:", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = TitleDark)
-            Spacer(Modifier.height(4.dp))
 
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { viewModel.saveSelectedGeminiModel("gemini-2.5-flash-lite") }) {
-                RadioButton(
-                    selected = uiState.selectedGeminiModel == "gemini-2.5-flash-lite",
-                    onClick = { viewModel.saveSelectedGeminiModel("gemini-2.5-flash-lite") }
-                )
-                Text("Gemini 2.5 Flash-Lite (Cepat & Hemat)", fontSize = 12.sp, color = TitleDark)
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { viewModel.saveSelectedGeminiModel("gemini-3.5-flash-lite") }) {
-                RadioButton(
-                    selected = uiState.selectedGeminiModel == "gemini-3.5-flash-lite",
-                    onClick = { viewModel.saveSelectedGeminiModel("gemini-3.5-flash-lite") }
-                )
-                Text("Gemini 3.5 Flash-Lite (Akurasi Tinggi)", fontSize = 12.sp, color = TitleDark)
-            }
-
-            Spacer(Modifier.height(14.dp))
-
-            // Tombol Buat API Key Gratis
-            OutlinedButton(
-                onClick = {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/api-keys"))
-                    context.startActivity(intent)
-                },
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("🔑 Buat API Key Gratis di Google AI Studio", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Button(
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/api-keys"))
+                        context.startActivity(intent)
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1A73E8))
+                ) {
+                    Text(
+                        "🔑 BUAT API KEY GRATIS",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White,
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://drive.google.com/drive/u/1/folders/17qWHvi3LLSculZSSxdLHaApd6U-KjtiO"))
+                        context.startActivity(intent)
+                    },
+                    modifier = Modifier.weight(0.9f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.5.dp, Color(0xFFFF0000))
+                ) {
+                    Text(
+                        "▶️ VIDEO TUTORIAL",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFFFF0000),
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
 
             Spacer(Modifier.height(14.dp))

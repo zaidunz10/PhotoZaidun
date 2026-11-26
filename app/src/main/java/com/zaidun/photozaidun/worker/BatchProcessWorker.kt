@@ -87,7 +87,7 @@ class BatchProcessWorker @AssistedInject constructor(
         }
         logStep("Worker Started")
 
-        val parallelism = (Runtime.getRuntime().availableProcessors()).coerceIn(12, 16)
+        val parallelism = (Runtime.getRuntime().availableProcessors()).coerceIn(12,12 )
         val semaphore = Semaphore(parallelism)
         try {
             setForeground(createForegroundInfo("Menyiapkan pemrosesan..."))
@@ -302,7 +302,7 @@ class BatchProcessWorker @AssistedInject constructor(
                             ?.listFiles()
                             ?.forEach { it.name?.let(existingFiles::add) }
 
-                        val batches = hourFiles.chunked(500)
+                        val batches = hourFiles.chunked(200)
                         var cumulativeCount = 0
 
                         batches.forEach { batchFiles ->
@@ -361,61 +361,79 @@ class BatchProcessWorker @AssistedInject constructor(
         quality: Int,
         wmShowTimestamp: Boolean
     ) {
-        val itemsToProcess = mutableListOf<ProcessItem>()
+        val subBatchStart = System.currentTimeMillis()
+        val decodeStart = System.currentTimeMillis()
+        val itemsToProcess = coroutineScope {
+            subFiles.map { file ->
+                async(Dispatchers.IO) {
+                    if (isStopped) return@async null
 
-        for (file in subFiles) {
-            if (isStopped) break
+                    var alreadyExists = false
+                    var outputFileName = ""
+                    var outputFile: DocumentFile? = null
 
-            var alreadyExists = false
-            var outputFileName = ""
-            var outputFile: DocumentFile? = null
+                    synchronized(outputFileLock) {
+                        val generatedName = generateNewName(file.name, suffix)
+                        if (generatedName in existingFiles) {
+                            alreadyExists = true
+                        } else {
+                            existingFiles.add(generatedName)
+                            outputFile = currentOutputFolder?.createFile(file.mime, generatedName)
+                            outputFileName = generatedName
+                        }
+                    }
 
-            synchronized(outputFileLock) {
-                val generatedName = generateNewName(file.name, suffix)
-                if (generatedName in existingFiles) {
-                    alreadyExists = true
-                } else {
-                    existingFiles.add(generatedName)
-                    outputFile = currentOutputFolder?.createFile(file.mime, generatedName)
-                    outputFileName = generatedName
+                    if (alreadyExists) {
+                        val done = completed.incrementAndGet()
+                        if (done % 5 == 0 || done == imageFiles.size) {
+                            updateExportProgress(done, imageFiles.size, file.name ?: "")
+                        }
+                        null
+                    } else {
+                        val processor = acquireProcessor()
+                        val resizedBitmap = try {
+                            processor.decodeAndResize(file.uri, ResizeConfig(percentage = resize))
+                        } catch (e: Exception) {
+                            Timber.e(e, "Gagal decodeAndResize untuk ${file.name}")
+                            null
+                        }
+
+                        if (resizedBitmap != null) {
+                            ProcessItem(file, outputFileName, outputFile, processor, resizedBitmap)
+                        } else {
+                            processorPool.offer(processor)
+                            null
+                        }
+                    }
                 }
-            }
-
-            if (alreadyExists) {
-                val done = completed.incrementAndGet()
-                if (done % 5 == 0 || done == imageFiles.size) {
-                    updateExportProgress(done, imageFiles.size, file.name ?: "")
-                }
-            } else {
-                val processor = acquireProcessor()
-                val resizedBitmap = try {
-                    processor.decodeAndResize(file.uri, ResizeConfig(percentage = resize))
-                } catch (e: Exception) {
-                    Timber.e(e, "Gagal decodeAndResize untuk ${file.name}")
-                    null
-                }
-
-                if (resizedBitmap != null) {
-                    itemsToProcess.add(ProcessItem(file, outputFileName, outputFile, processor, resizedBitmap))
-                } else {
-                    processorPool.offer(processor)
-                }
-            }
+            }.awaitAll().filterNotNull().toMutableList()
         }
+        val decodeMs = System.currentTimeMillis() - decodeStart
+
+        var aiScanMs = 0L
+        var dbInsertMs = 0L
 
         if (itemsToProcess.isNotEmpty()) {
             // 2. Tahap 2: AI Scan Gemini (Kolase 2x2) jika ada API Key aktif
             val activeKey = geminiKeyManager.getNextAvailableKey()
             if (activeKey != null) {
-                try {
-                    val resizedBitmaps = itemsToProcess.map { it.resizedBitmap }
-                    val aiResults = geminiAnalyzer.analyzeBatch(resizedBitmaps)
+                val aiStart = System.currentTimeMillis()
+                val resizedBitmaps = itemsToProcess.map { it.resizedBitmap }
+                val aiResults = try {
+                    geminiAnalyzer.analyzeBatch(resizedBitmaps)
+                } catch (aiEx: Exception) {
+                    Timber.tag("AI_SCAN").e(aiEx, "Gagal Gemini AI Scan Batch")
+                    emptyList()
+                }
+                aiScanMs = System.currentTimeMillis() - aiStart
 
-                    for (i in itemsToProcess.indices) {
-                        val item = itemsToProcess[i]
-                        val aiMeta = if (i < aiResults.size) aiResults[i] else null
-                        val exifTimeStr = extractExifTimeString(item.file.uri, item.file.lastModified)
+                val dbStart = System.currentTimeMillis()
+                for (i in itemsToProcess.indices) {
+                    val item = itemsToProcess[i]
+                    val aiMeta = if (i < aiResults.size) aiResults[i] else null
+                    val exifTimeStr = extractExifTimeString(item.file.uri, item.file.lastModified)
 
+                    try {
                         photoAiMetadataDao.insert(
                             PhotoAiMetadataEntity(
                                 fileName = item.outputFileName,
@@ -427,13 +445,15 @@ class BatchProcessWorker @AssistedInject constructor(
                             )
                         )
                         Timber.tag("AI_SCAN").d("💾 Saved Gemini Metadata DB [${item.outputFileName}]: Model=${aiMeta?.bikeModel}, Plat=${aiMeta?.plateNumber}, Motor=${aiMeta?.bikeColor}, Jaket=${aiMeta?.jacketColor}")
+                    } catch (dbEx: Exception) {
+                        Timber.tag("EXPORT_PERF").e(dbEx, "Gagal insert DB metadata ${item.outputFileName}")
                     }
-                } catch (aiEx: Exception) {
-                    Timber.tag("AI_SCAN").e(aiEx, "Gagal Gemini AI Scan Batch")
                 }
+                dbInsertMs = System.currentTimeMillis() - dbStart
             }
 
             // 3. Tahap 3: Watermark & Simpan ke Disk
+            val wmSaveStart = System.currentTimeMillis()
             for (item in itemsToProcess) {
                 try {
                     item.outputFile?.uri?.let { outUri ->
@@ -463,6 +483,13 @@ class BatchProcessWorker @AssistedInject constructor(
                     processorPool.offer(item.processor)
                 }
             }
+            val wmSaveMs = System.currentTimeMillis() - wmSaveStart
+            val totalSubBatchMs = System.currentTimeMillis() - subBatchStart
+
+            Timber.tag("EXPORT_PERF").i(
+                "⏱️ [SubBatch ${itemsToProcess.size} Foto] Total=${totalSubBatchMs}ms | " +
+                "1.Decode=${decodeMs}ms | 2.AIScan=${aiScanMs}ms | 3.DBInsert=${dbInsertMs}ms | 4.WatermarkSave=${wmSaveMs}ms"
+            )
         }
     }
 
